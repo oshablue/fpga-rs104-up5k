@@ -193,6 +193,7 @@ set_io --warn-no-port IOB_35b_SPI_SS  16      # "SS_GRAY"
 set_io --warn-no-port IOB_33b_SPI_SDI 17      # "MOSI_YELLOW"
 
 #ifdef BUILD_FOR_RS104
+  # OPTIONAL RS104 UART PINS
   #ifdef UART_CCC_FPGA_PIN18_CCCTX
   #set_io --warn-no-port UART_TX            18   # RS104: Optionally tied via solder jumper (SJ) CCC-TX
   #end
@@ -216,7 +217,7 @@ set_io --warn-no-port CLK             20    #IOB_25b_G3      20    # G3 / Diff: 
   #ifndef BUILD_FOR_RS104
   #set_io --warn-no-port IOB_23b         21    # Diff: COMP_22a
   #else
-  #set_io --warn-no-port FPGA_PIN21      21      # RS104: Not implemented except for net name in 1 place
+  #set_io --warn-no-port FPGA_PIN21      21      # RS104: Not implemented except for net name in 1 place thus not implemented
   #end
 #else
 #set_io --warn-no-port data_out[1]             21    #Again, just temp testing - 12MHz input on pin 35
@@ -228,6 +229,7 @@ set_io --warn-no-port CLK             20    #IOB_25b_G3      20    # G3 / Diff: 
 #ifndef BUILD_FOR_RS104
 #set_io --warn-no-port fifo_wri        23    #IOT_37a         23    # Diff: TRUE of IOT_36b
 #else
+## not used
 #end
 
 #INFO:
@@ -318,9 +320,9 @@ set_io --warn-no-port data_out[0]     36    # RS104: PDO0 => JT3A P10
 #
 
 #ifndef BUILD_FOR_UP5KBREAKOUT
-#set_io --warn-no-port RST             37    #IOT_45a_G1      37    # G1 / Diff: TRUE of IOT_44b
+set_io --warn-no-port RST             37    #IOT_45a_G1      37    # G1 / Diff: TRUE of IOT_44b
 #else
-#end # Just don't use it - it conflicts with clock mapping right now using the lattice demo setup
+#end # Just don't use it on breakout board - it conflicts with clock mapping right now using the lattice demo setup
 
 set_io --warn-no-port trig_in         38    #IOT_50b         38    # Diff: COMP of IOT_51a
 set_io --warn-no-port RGB0            39    # Blue (?)

@@ -132,7 +132,11 @@
 
 // UART output for e.g. RS-485/422 style conversion output drive in our particular
 // system
-`define USE_UART 1
+`define USE_UART // 1
+
+// For parallel data output
+// Default: Not used for UART / RS-485
+//`define USE_DATA_PORT
 
 
 
@@ -141,8 +145,9 @@
 //`define FLASH_LEDS 1
 
 
-
-// TODO - Implemented TXE# (fifo_txe)
+`ifndef USE_UART
+  // TODO - Implemented TXE# (fifo_txe)
+`endif
 
 // For divide by N
 `define CLOG2(x) \
@@ -176,13 +181,21 @@ module top (
     //input rx_delay_ctrl_b1,
     input [1:0] rx_delay_ctrl,
     input [7:0] data_in,
+
+  `ifndef USE_UART
     input fifo_txe,             // FIFO ok to write (buffer empty/write to FIFO enabled)
+  `endif
+
     //output LED,                 // User/boot LED next to power LED
     //output USBPU,               // USB pull-up resistor
     //output SAMPLECLK,           // capture output from PLL
     //output SAMPLECLK8X,         //
     //output clk_lock,
+
+  `ifdef USE_DATA_PORT
     output [7:0] data_out,      // testing external LED
+  `endif
+
     // re-purpose capt_done from output to input for rx_delay_ctrl_b1
     //output capt_done,           // capture event is complete
     output adc_encode,           // encode signal to ADC to capture a sample
@@ -191,7 +204,7 @@ module top (
     output RTZ_NEG,
     output RTZ_POS
 
-  `ifdef USE_LATTICE_BREAKOUT_DEMO  // Not true for HDL-0108-RSCPT config/hw
+  `ifdef USE_LATTICE_BREAKOUT_DEMO  // Not true for HDL-0108-RSCPT or RS104 config/hw
     ,
     output RGB0,                 // status output
     output RGB1,
@@ -261,8 +274,8 @@ module top (
 
 
 
-    // Not for HDL-0108-RSCPT config/hw
-  `ifdef USE_LATTICE_BREAKOUT_DEMO        // Not for HDL-0108-RSCPT config/hw
+    // Not for HDL-0108-RSCPT or RS104 config/hw
+  `ifdef USE_LATTICE_BREAKOUT_DEMO        // Not for HDL-0108-RSCPT or RS104 config/hw
   `ifdef FLASH_LEDS
     // Status LED output (?) ... testing
     wire pretty_slow;

@@ -247,7 +247,7 @@ set_io --warn-no-port CLK             20    #IOB_25b_G3      20    # G3 / Diff: 
 #
 
 #ifdef BUILD_FOR_RS104
-set_io --warn-no-port fifo_txt          25    # RS104: 2232OUT_TX!E => SJ6 => JT3B P6 Optional GPIO
+set_io --warn-no-port fifo_txe          25    # RS104: 2232OUT_TX!E => SJ6 => JT3B P6 Optional GPIO
 #else
 #set_io --warn-no-port fifo_txe        25    #IOT_36b         25    # Diff: COMP of IOT_37a
 #end
@@ -258,11 +258,13 @@ set_io --warn-no-port fifo_txt          25    # RS104: 2232OUT_TX!E => SJ6 => JT
 #set_io --warn-no-port data_out[5]     28    #IOT_41a         28
 #else
   #ifdef BUILD_FOR_RS104
+    # NOTE/CAUTION: If you enable parallel data out: USE_DATA_PORT then data_out[7/6]
+    # versus UART_TX/RX needs to get sorted out
     #ifdef UART_CCC_PDO7_CCCTX
-    set_io --warn-no-port data_out[7]     26    # RS104: PDO7 => CCC-TX
+    set_io --warn-no-port UART_TX      26 #see note above #data_out[7]     26    # RS104: PDO7 => CCC-TX
     #end
     #ifdef UART_CCC_PDO6_CCCRX
-    set_io --warn-no-port data_out[6]     27    # RS104: PDO6 => CCC-RX
+    set_io --warn-no-port UART_RX      27 #see note above #data_out[6]     27    # RS104: PDO6 => CCC-RX
     #end
     set_io --warn-no-port data_out[5]   28    # RS104: PDO5 => JT3A P1
   #end

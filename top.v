@@ -134,6 +134,18 @@
 // system
 `define USE_UART // 1
 
+
+
+// Testing 0 - 9 ascii output at 1 second intervals:
+//`define UART_1SEC_OUTPUT_TEST
+
+// Include / use the module that encapsulates a 1-second interval 9600
+// digit transmit
+//`define USE_UART_TEST_MODULE
+
+
+
+
 // For parallel data output
 // Default: Not used for UART / RS-485
 //`define USE_DATA_PORT
@@ -199,7 +211,9 @@ module top (
     // re-purpose capt_done from output to input for rx_delay_ctrl_b1
     //output capt_done,           // capture event is complete
     output adc_encode,           // encode signal to ADC to capture a sample
+  `ifndef USE_UART
     output fifo_wri,             // FIFO write strobe
+  `endif
     output PULSE_NEG,
     output RTZ_NEG,
     output RTZ_POS
@@ -349,7 +363,23 @@ module top (
         dumpclkreg <= ~dumpclkreg;
       end
     end
-  `endif
+  `endif // ifdef SELFREAD
+
+
+  // Slower readmem signal for dumping the bytes over serial instead of parallel
+  `ifdef SELFREAD
+  `ifdef USE_UART
+    wire read_mem_uart;
+    divide_by_n #(.N(8)) divread_mem_uart(dumpclk, 1'b0, read_mem_uart);
+    wire read_mem_uart_rise, read_mem_uart_fall;
+    edge_detect edet_self_read_mem_uart (
+        .async_sig  (read_mem_uart),
+        .clk        (SAMPLECLK),
+        .rise       (read_mem_uart_rise),
+        .fall       (read_mem_uart_fall)
+    );
+  `endif // ifdef USE_UART
+  `endif // ifdef SELFREAD
 
 
 
@@ -1003,6 +1033,8 @@ module top (
 
 
 
+
+  `ifndef USE_UART
     always @( posedge SAMPLECLK )
     begin
       if ( trig_in_rise ) begin
@@ -1012,6 +1044,23 @@ module top (
         addr_rd_nxt <= (addr_rd + 1'b 1);
       end
     end
+  `endif // ifndef USE_UART
+
+  `ifdef USE_UART
+    always @( posedge SAMPLECLK )
+    begin
+      if ( trig_in_rise ) begin
+        addr_rd_nxt <= 12'b 0000_0000_0000;
+      end
+      if ( read_mem_uart_rise ) begin
+        addr_rd_nxt <= (addr_rd + 1'b 1);
+      end
+    end
+  `endif // ifdef USE_UART
+
+
+
+
 
 
 
@@ -1135,19 +1184,40 @@ module top (
         //mem[addr_wr] <= data_in;      // To test correct sequencing: <= addr_wr[7:0] etc.
       end
 
-      if ( read_mem ) begin
-        if ( addr_rd == 4 ) begin
-          addr_rd <= addr_rd_nxt;
-          seq_id <= seq_id_nxt;
-          val <= seq_id;
-        end else if ( addr_rd < 12 ) begin
-          addr_rd <= addr_rd_nxt;
-          val <= sof[addr_rd];
-        end else begin
-          addr_rd <= addr_rd_nxt;
-          val <= mem[addr_rd];          // To test correct addr_rd handling: <= addr_rd[7:0] etc.
+      `ifndef USE_UART
+        if ( read_mem ) begin
+          if ( addr_rd == 4 ) begin
+            addr_rd <= addr_rd_nxt;
+            seq_id <= seq_id_nxt;
+            val <= seq_id;
+          end else if ( addr_rd < 12 ) begin
+            addr_rd <= addr_rd_nxt;
+            val <= sof[addr_rd];
+          end else begin
+            addr_rd <= addr_rd_nxt;
+            val <= mem[addr_rd];          // To test correct addr_rd handling: <= addr_rd[7:0] etc.
+          end
         end
-      end
+      `endif // ifndef USE_UART
+
+      `ifdef USE_UART
+        if ( read_mem_uart ) begin
+          if ( addr_rd == 4 ) begin
+            addr_rd <= addr_rd_nxt;
+            seq_id <= seq_id_nxt;
+            //val <= seq_id;
+            uart_txbyte <= seq_id;
+          end else if ( addr_rd < 12 ) begin
+            addr_rd <= addr_rd_nxt;
+            //val <= sof[addr_rd];
+            uart_txbyte <= sof[addr_rd];
+          end else begin
+            addr_rd <= addr_rd_nxt;
+            //val <= mem[addr_rd];          // To test correct addr_rd handling: <= addr_rd[7:0] etc.
+            uart_txbyte <= mem[addr_rd];
+          end
+        end
+      `endif // ifndef USE_UART
 
     end
 
@@ -1198,7 +1268,8 @@ module top (
     // Every 1 sec, send a next char over uart
     //
 
-    `ifdef USE_LATTICE_BREAKOUT_DEMO
+
+    //`ifdef USE_LATTICE_BREAKOUT_DEMO
     `ifdef USE_UART
 
       parameter ASCII_0 = 8'd48; //8'd0; //8'd48;
@@ -1314,7 +1385,16 @@ module top (
 
       // ifdef USE_UART_BAUD_10000000 (10 MHz)
       //parameter period_tx_send_pulse = 4 * period_10M;
-      parameter period_tx_send_pulse = 4 * period_fastest;
+      // TODO:
+      // If using 4 * period_faster -- we get no output for dumping samples
+      // over UART at the first target rate
+      // Using period_fastest we do
+      // So maybe the signal never changes or is too long - so we need to work with this
+      // ALSO TODO:
+      // We get about 0x0420 samples (or byte, if real or not) out -- so need to debug that too
+      // might just be duration of sapmle dump output versus actual count?
+      // Or timing ...
+      parameter period_tx_send_pulse = period_fastest; //4 * period_fastest;
 
       always @ (posedge clk5) begin
           cntr_1 <= cntr_1 - 1;
@@ -1324,7 +1404,7 @@ module top (
           end
       end
 
-
+      `ifdef UART_1SEC_OUTPUT_TEST
       monostable #(
         .PULSE_WIDTH(period_tx_send_pulse),
         .COUNTER_WIDTH(32)
@@ -1334,7 +1414,19 @@ module top (
         .trigger      (clk_uart_trigger_output),
         .pulse        (uart_send)
       );
+      `endif // ifdef UART_1SEC_OUTPUT_TEST
 
+      `ifndef UART_1SEC_OUTPUT_TEST
+      monostable #(
+        .PULSE_WIDTH(period_tx_send_pulse),
+        .COUNTER_WIDTH(32)
+      ) msv_uart_send_pulse (
+        .clk          (clk160),
+        .reset        (RST),
+        .trigger      (read_mem_uart), //read_mem_uart_fall?
+        .pulse        (uart_send)
+      );
+      `endif
 
       uart_tx_8n1 transmitter (
 
@@ -1345,7 +1437,7 @@ module top (
           .txbyte (uart_txbyte),
 
           // module input: flag to enable sending data
-          .senddata (uart_send),
+          .senddata (uart_send), // was uart_send
 
           // output: tx is finished
           .txdone (uart_txed),
@@ -1373,20 +1465,22 @@ module top (
         assign RGB2 = 1'b1;
       `endif
 
-      always @ ( posedge clk_uart_trigger_output )
-      begin
+      `ifdef UART_1SEC_OUTPUT_TEST
+        always @ ( posedge clk_uart_trigger_output )
+        begin
 
-          if (uart_txbyte == ASCII_9) begin
-              uart_txbyte <= ASCII_0;
-          end else begin
-              uart_txbyte <= uart_txbyte + 1;
-          end
+            if (uart_txbyte == ASCII_9) begin
+                uart_txbyte <= ASCII_0;
+            end else begin
+                uart_txbyte <= uart_txbyte + 1;
+            end
 
-      end
+        end
+      `endif // ifdef UART_1SEC_OUTPUT_TEST
 
 
-    `endif
-    `endif
+    `endif    // ifdef USE_UART
+    //`endif  // ifdef USE_LATTICE_BREAKOUT_DEMO
 
 
 
@@ -1775,6 +1869,7 @@ endmodule
 //
 // top.v variant - renamed to sample_uart_git_module
 /* Top level module for keypad + UART demo */
+`ifdef USE_UART_TEST_MODULE
 module sample_uart_git_top_module (
     // input hardware clock (12 MHz)
     hwclk,
@@ -1863,6 +1958,7 @@ module sample_uart_git_top_module (
     end
 
 endmodule
+`endif // ifdef USE_UART_TEST_MODULE
 //
 // End of
 //

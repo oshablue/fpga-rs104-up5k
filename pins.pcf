@@ -278,7 +278,7 @@ set_io --warn-no-port fifo_txe          25    # RS104: 2232OUT_TX!E => SJ6 => JT
 
 #define BUILD_FOR_RS104
 set_io --warn-no-port data_out[4]     31    # RS104: PDO4 => JT3A P2
-set_io --warn-no-port data_out[3]     32    # RS104: PDO3 => JT3A P4
+set_io --warn-no-port PDO3            32    #data_out[3]     32    # RS104: PDO3 => JT3A P4
 #else
 #set_io --warn-no-port data_out[4]     31    #IOT_42b         31    # Diff: COMP of IOT_43a
 #set_io --warn-no-port data_out[3]     32    #IOT_43a         32    # Diff: TRUE of IOT_42b
@@ -288,7 +288,7 @@ set_io --warn-no-port data_out[3]     32    # RS104: PDO3 => JT3A P4
 #set_io --warn-no-port VCCIO_0         33
 
 #ifdef BUILD_FOR_RS104
-set_io --warn-no-port data_out[2]     34     # RS104: PDO2 => JT3A P6
+set_io --warn-no-port PDO2             34    #data_out[2]     34     # RS104: PDO2 => JT3A P6
 #else
 #set_io --warn-no-port data_out[2]     34    #IOT_44b         34    # Diff: COMP of IOT_45a
 #end
@@ -299,14 +299,14 @@ set_io --warn-no-port data_out[2]     34     # RS104: PDO2 => JT3A P6
   #set_io --warn-no-port data_out[1]     35    #IOT_46b_G0      35    # G0
   #end
   #ifdef BUILD_FOR_RS104
-  set_io --warn-no-port data_out[1]     35    # RS104: PDO1 => JT3A P8
+  set_io --warn-no-port PDO1             35    #data_out[1]     35    # RS104: PDO1 => JT3A P8
   #end
 #else
 #set_io --warn-no-port CLK             35    #TEMP: On EVB this is 12MHz input
 #endif
 
 #ifdef BUILD_FOR_RS104
-set_io --warn-no-port data_out[0]     36    # RS104: PDO0 => JT3A P10
+set_io --warn-no-port PDO0     36    # RS104: PDO0 => JT3A P10
 #else
 #set_io --warn-no-port data_out[0]     36    #IOT_48b         36    # Diff: COMP of IOT_49a
 #end
@@ -326,7 +326,7 @@ set_io --warn-no-port RST             37    #IOT_45a_G1      37    # G1 / Diff: 
 #else
 #end # Just don't use it on breakout board - it conflicts with clock mapping right now using the lattice demo setup
 
-set_io --warn-no-port trig_in         38    #IOT_50b         38    # Diff: COMP of IOT_51a
+set_io --warn-no-port ext_trig_in     38    #IOT_50b         38    # Diff: COMP of IOT_51a
 set_io --warn-no-port RGB0            39    # Blue (?)
 set_io --warn-no-port RGB1            40    # Green (?)
 set_io --warn-no-port RGB2            41    # Red (?)

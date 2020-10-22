@@ -167,7 +167,7 @@
 
 
 // Testing for non-brams timing, using small data bufs
-`define TEST_SMALL_DATA
+//`define TEST_SMALL_DATA
 
 
 
@@ -183,8 +183,12 @@
 
 
 // MACRO for toggling PLL on/off for respectively real world h/w vs simulation of POST for example
-`define SIM
+//`define SIM
 
+
+`ifdef SIM
+  `define TEST_SMALL_DATA
+`endif // ifdef SIM
 
 
 
@@ -1590,15 +1594,16 @@ module top (
 
 
 
+
     /*
 
-    >=>        >=> >======>     >=> >===>>=====> >=======>
-    >=>        >=> >=>    >=>   >=>      >=>     >=>
-    >=>   >>   >=> >=>    >=>   >=>      >=>     >=>
-    >=>  >=>   >=> >> >==>      >=>      >=>     >=====>
-    >=> >> >=> >=> >=>  >=>     >=>      >=>     >=>
-    >> >>    >===> >=>    >=>   >=>      >=>     >=>
-    >=>        >=> >=>      >=> >=>      >=>     >=======>
+    >=>        >=> >======>     >=> >===>>=====> >=======>             >>       >====>     >====>     >=>      >=>
+    >=>        >=> >=>    >=>   >=>      >=>     >=>                  >>=>      >=>   >=>  >=>   >=>   >=>    >=>
+    >=>   >>   >=> >=>    >=>   >=>      >=>     >=>                 >> >=>     >=>    >=> >=>    >=>   >=> >=>
+    >=>  >=>   >=> >> >==>      >=>      >=>     >=====>            >=>  >=>    >=>    >=> >=>    >=>     >=>
+    >=> >> >=> >=> >=>  >=>     >=>      >=>     >=>               >=====>>=>   >=>    >=> >=>    >=>     >=>
+    >> >>    >===> >=>    >=>   >=>      >=>     >=>              >=>      >=>  >=>   >=>  >=>   >=>      >=>
+    >=>        >=> >=>      >=> >=>      >=>     >=======>       >=>        >=> >====>     >====>         >=>
 
     */
     //*************************************************************************
@@ -1648,6 +1653,21 @@ module top (
     `endif // ifndef USE_UART
 
 
+
+
+
+
+    /*
+
+    >=>        >=> >======>     >=> >===>>=====> >=======>
+    >=>        >=> >=>    >=>   >=>      >=>     >=>
+    >=>   >>   >=> >=>    >=>   >=>      >=>     >=>
+    >=>  >=>   >=> >> >==>      >=>      >=>     >=====>
+    >=> >> >=> >=> >=>  >=>     >=>      >=>     >=>
+    >> >>    >===> >=>    >=>   >=>      >=>     >=>
+    >=>        >=> >=>      >=> >=>      >=>     >=======>
+
+    */
     /***************************************************************************
     //
     /* WRITE TO MEMORY
@@ -1686,6 +1706,24 @@ module top (
       // (* keep *)
       assign delayed_capture_clk = ( ~sclk && SAMPLECLK ); // && ~clk160 );
 
+      // We move this to a separate block and use block assignments
+      // hopefully to allow for RAM write timing
+      // It seems to have made the difference
+      always @ ( posedge clk160 ) begin
+        if ( trigd && delayed_capture_clk ) begin
+        `ifndef TEST_NO_BRAM
+          `ifndef DATA_TEST_INCREMENT_VALUES
+            mem[addr_wr] = data_in;
+          `endif
+          `ifdef DATA_TEST_INCREMENT_VALUES
+            // Even though yosys gives warning that it actually treats as non-blocking
+            // this code actually works at the moment
+            mem[addr_wr] = (addr_wr[7:0] | 8'b 1000_0000);// test_val_8bit; // for checking if it's writing when read
+          `endif
+        `endif // ifndef TEST_NO_BRAM
+        end
+      end
+
 
       always @( posedge clk160 ) //  delayed_capture_clk )
       begin
@@ -1695,7 +1733,7 @@ module top (
           // NOTE: Yosys doesn't like synthesis translate_on/off
           // like ... I agree - using just MACROs then ...
           //// NOsynthesisNOtranslateNOoff
-          `ifndef TEST_NO_BRAM
+          /*`ifndef TEST_NO_BRAM
             `ifndef DATA_TEST_INCREMENT_VALUES
               mem[addr_wr] <= data_in;
             `endif
@@ -1704,6 +1742,7 @@ module top (
             `endif
           `endif // ifndef TEST_NO_BRAM
           //// NOsynthesisNOtranslateNOon
+          */
         end
 
       end
@@ -1725,8 +1764,17 @@ module top (
 
 
 
+    /*
 
+      >=>>=>       >===>      >=======>
+    >=>    >=>   >=>    >=>   >=>
+     >=>       >=>        >=> >=>
+       >=>     >=>        >=> >=====>
+          >=>  >=>        >=> >=>
+    >=>    >=>   >=>     >=>  >=>
+     >=>>=>       >===>      >=>
 
+    */
     /***************************************************************************
     //
     /* START OF FRAME (Setup/Definition)
@@ -1790,7 +1838,21 @@ module top (
     `ifdef USE_UART
       reg [7:0] uart_txbyte = 0; // To show uncertainty, remove the init
       // = ASCII_0; // init to a non-zero value doesn't work on this h/w
+      //`endif // ifdef USE_UART
+
+
+
+      /*always @ ( posedge clk160 ) begin
+        if ( reset ) begin
+          seq_id <= 0; // reset this too so nxt doesn't get the incremented value on trigger
+        end else begin
+          if ( read_mem_uart_rise ) begin
+
+          end
+        end
+      end*/
     `endif // ifdef USE_UART
+
 
     always @( posedge clk160 ) // was: SAMPLECLK )
     begin
@@ -1814,6 +1876,7 @@ module top (
           seq_id_nxt <= seq_id + 1;
         end
       end
+
 
 
       // Was here:
@@ -1855,6 +1918,10 @@ module top (
           if ( rd_addr_update_fall ) begin
             addr_rd <= addr_rd_nxt;  // TODOFUTURE: Wow really should make naming more consistent/convetion-based! now
           end
+
+          //if ( reset ) begin
+          //  seq_id <= 0; // reset this too so nxt doesn't get the incremented value on trigger
+          //end
 
           if ( read_mem_uart_fall ) begin
             if ( addr_rd == 4 ) begin

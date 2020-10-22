@@ -171,8 +171,22 @@
 
 
 
+
+
 // Idle state for the uart_send signal
 `define UART_SEND_IDLE    1'b 1
+
+
+
+
+
+
+
+// MACRO for toggling PLL on/off for respectively real world h/w vs simulation of POST for example
+`define SIM
+
+
+
 
 
 
@@ -354,8 +368,9 @@ module top (
     // within apio
   //`ifndef SYNTHESIS // usually ifdef - but for putting fake clock into SYN (POST) - change to ifndef
   // ? - using the ifndef SYNTH_TEST macro this builds ok in hardware (within apio) mode
-  //`ifndef SYNTH_TEST
-  `ifdef SYNTHESIS
+  //`ifndef SYNTH_TEST // use this for SIMULATION (post) only
+  //`ifdef SYNTHESIS // use this for real hardware to include the PLL
+  `ifndef SIM         // this MACRO is toggled by hand here
     `ifndef PLLSOURCE_BOTTOM_BANK // We are here for HDL-0108-RSCPT config/hw
       pllcore p(
           .clk    (CLK),          // 16MHz oscillator input
@@ -652,6 +667,16 @@ module top (
       end*/
       // new_capt means there is complete data ready to read out that has not yet been completely read out
       assign read_mem_uart = (clk_read_mem_uart & new_capt);
+
+      // clk160 condition for reading memory seemed to fail and provide blank output
+      // using a block read at the slow clock of the read_mem_uart seems to capture
+      // correctly the memory address such that the value is readily available for a
+      // non-blocking read in the main output section
+      reg [7:0] next_byte;
+      always @ ( posedge read_mem_uart ) begin
+        next_byte = mem[addr_rd];
+      end
+
       wire read_mem_uart_rise, read_mem_uart_fall;
       // Testing:
       `ifdef TEST_TIMING_TO_PIN_OUTPUT
@@ -1675,7 +1700,7 @@ module top (
               mem[addr_wr] <= data_in;
             `endif
             `ifdef DATA_TEST_INCREMENT_VALUES
-              mem[addr_wr] <= addr_wr[7:0];// test_val_8bit;
+              mem[addr_wr] <= (addr_wr[7:0] | 8'b 1000_0000);// test_val_8bit; // for checking if it's writing when read
             `endif
           `endif // ifndef TEST_NO_BRAM
           //// NOsynthesisNOtranslateNOon
@@ -1859,7 +1884,8 @@ module top (
                 // mem[something]
                 // is what is meant here
                 //uart_txbyte <= mem[addr_rd];
-                uart_txbyte <= addr_rd[7:0];
+                //uart_txbyte <= addr_rd[7:0];
+                uart_txbyte <= next_byte;
                 //// NOsynthesisNOtranslateNOon
               `else
                 uart_txbyte <= addr_rd[7:0];
@@ -1882,11 +1908,14 @@ module top (
           end
           */
 
-        end
+        end // if read_mem_uart_fall
+
+
 
       `endif // ifndef USE_UART
 
-    end
+    end // always @ posedge clk160
+
 
     // Back to the LED flasher test code, left-overs
     // drive USB pull-up resistor to '0' to disable USB

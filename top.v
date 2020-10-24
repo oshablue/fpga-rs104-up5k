@@ -38,6 +38,31 @@
 // Notes:
 // All Lattice devices have weak pull up resistors on IO
 
+// Refs:
+// https://stackoverflow.com/questions/38030768/icestick-yosys-using-the-global-set-reset-gsr
+// http://www.clifford.at/yosys/files/yosys_appnote_011_design_investigation.pdf
+// https://en.wikibooks.org/wiki/Programmable_Logic/Verilog_RTL_Coding_Guidelines
+// https://electronics.stackexchange.com/questions/38645/why-are-inferred-latches-bad
+// https://www.doulos.com/knowhow/fpga/why-should-i-care-about-transparent-latches/
+// https://electronics.stackexchange.com/questions/236845/register-with-enable-signal-problem-of-understanding-simulation-results
+// https://stackoverflow.com/questions/38030768/icestick-yosys-using-the-global-set-reset-gsr
+
+// Reminders:
+// - (* keep *) works for SIM synth in POST to prevent pruning a signal however
+//   it may not be desirable as pruning happens typically for a good reason
+// - Yosys, rightly imho, doesn't like the // synthesis translate_off / translate_on directives
+
+// This is only needed if command line yosys is used
+// Or you can just add the one-shots.v to the command line command
+// If you include here, you will get a redefinition error because the file
+// is automatically included from within the top directory
+// Only use include for files not in the top level directory here
+`include "submodules/one-shots.v"
+
+// However, the header (.vh) files are not automatically included in the compilation
+// when they live in the same root directory
+`include "top.vh"
+
 
 // For turning on the selfread so that after capture, data is dumped in parallel
 // out to some external fifo for example
@@ -161,7 +186,7 @@
 
 
 // TESTING - Test increment data values into memory instead of capture data
-`define DATA_TEST_INCREMENT_VALUES
+//`define DATA_TEST_INCREMENT_VALUES
 
 
 
@@ -187,7 +212,9 @@
 
 
 `ifdef SIM
+  //`include "submodules/one-shots.v" // in the subdir, it is not automatically included, so we can an include statement universally
   `define TEST_SMALL_DATA
+  `define USE_SIM_CLK_NOT_PLL
 `endif // ifdef SIM
 
 
@@ -243,7 +270,6 @@
    x <= 32768	 ? 15 : \
    x <= 65536	 ? 16 : \
    -1
-
 
 
 
@@ -339,8 +365,6 @@ module top (
     reg[7:0] seq_id;  // sequence ID for the frame
     reg[7:0] seq_id_nxt;
 
-    wire trig_in_fall, trig_in_rise;
-    wire trig_in;
     reg reset;
 
     reg [11:0] addr_wr, addr_wr_nxt, addr_rd, addr_rd_nxt;
@@ -374,7 +398,7 @@ module top (
   // ? - using the ifndef SYNTH_TEST macro this builds ok in hardware (within apio) mode
   //`ifndef SYNTH_TEST // use this for SIMULATION (post) only
   //`ifdef SYNTHESIS // use this for real hardware to include the PLL
-  `ifndef SIM         // this MACRO is toggled by hand here
+  `ifndef USE_SIM_CLK_NOT_PLL         // this MACRO is toggled by hand here
     `ifndef PLLSOURCE_BOTTOM_BANK // We are here for HDL-0108-RSCPT config/hw
       pllcore p(
           .clk    (CLK),          // 16MHz oscillator input
@@ -413,8 +437,15 @@ module top (
     // SAMPLECLK = 80 MHz
     // sclk = 40 MHz
     wire sclk;
-    divide_by_n #(.N(2)) div160to80(clk160, 1'b0, SAMPLECLK);
-    //divide_by_n #(.N(2)) divsclk(SAMPLECLK, 1'b0, sclk);
+
+    `ifndef USE_UART
+      divide_by_n #(.N(2)) div160to80(clk160, 1'b0, SAMPLECLK);
+    `else
+      wire sysclk;
+      divide_by_n #(.N(2)) div160to80(clk160, 1'b0, sysclk);
+      assign SAMPLECLK = sysclk;
+    `endif
+
     divide_by_n #(.N(4)) divsclk(clk160, 1'b0, sclk);
     assign adc_encode = (sclk);
 
@@ -463,18 +494,20 @@ module top (
       // Moving this section to the block above where these vars are otherwise used for the
       // remaining control flow ...
       // Trying again with a reset pulse
+      // See the Lattice ice40 ultraplus Family Datasheet for timing max's
+      // We are back to using
       wire reset_wire;
       monostable #(
-        .PULSE_WIDTH(5),              // 160MHz/32 = 5 for 32MHz operation of the MCU
+        .PULSE_WIDTH(3),              // 160MHz/32 = 5 for 32MHz operation of the MCU
         .COUNTER_WIDTH(4)
       ) msv_reset (
-          .clk          (clk160),
+          .clk          (sysclk),
           .reset        (1'b0),
           .trigger      (!RST),
           .pulse        (reset_wire)
       );
       //reg reset;
-      always @( posedge clk160 ) begin
+      always @( posedge sysclk ) begin
         reset <= reset_wire;
       end
 
@@ -526,6 +559,323 @@ module top (
       //assign RGB2 = 1'b1;
     `endif
   `endif
+
+
+
+
+
+
+
+
+
+
+
+    /*
+
+      >===>>=====> >======>     >=>    >===>          >=> >==>    >=>
+           >=>     >=>    >=>   >=>  >>    >=>        >=> >> >=>  >=>
+           >=>     >=>    >=>   >=> >=>               >=> >=> >=> >=>
+           >=>     >> >==>      >=> >=>               >=> >=>  >=>>=>
+           >=>     >=>  >=>     >=> >=>   >===>       >=> >=>   > >=>
+           >=>     >=>    >=>   >=>  >=>    >>        >=> >=>    >>=>
+           >=>     >=>      >=> >=>   >====>          >=> >=>     >=>
+
+    */
+
+    //*************************************************************************
+    //
+    /* TRIGGER INPUT SIGNAL MANAGEMENT AND GENERATION
+    //
+    /*************************************************************************/
+
+    // https://electronics.stackexchange.com/questions/26502/verilog-check-for-two-negedges-in-always-block
+    // TODO !!!: Probably should update this to be USE_UART case-dependent
+
+    wire trig_in_fall, trig_in_rise;
+    wire trig_in;
+    wire trig_in_rise_pulse;
+
+    monostable #(
+      .PULSE_WIDTH(3),              // 160MHz/32 = 5 for 32MHz operation of the MCU
+      .COUNTER_WIDTH(4)
+    ) msv_trig_in (
+      .clk          (sysclk),
+      .reset        (reset),
+      .trigger      (ext_trig_in),
+      .pulse        (trig_in)
+    );
+    edge_detect edet_trig_in (
+      .async_sig  (trig_in),
+      .clk        (sysclk), //was sclk //(clk_copy), // so far SAMPLECLK is best //clk160 should give edge lengths of 80MHz?
+      .rise       (trig_in_rise),
+      .fall       (trig_in_fall)
+    );
+    monostable #(
+      .PULSE_WIDTH(3),
+      .COUNTER_WIDTH(4)
+    ) msv_trig_in_rise (
+      .clk         (sysclk),
+      .reset       (reset), // ???
+      .trigger     (trig_in_rise),
+      .pulse       (trig_in_rise_pulse)
+    );
+    // This was (above) all just only the external signal just feeding into the
+    // edge_detect directly, and using sclk instead of SAMPLECLK
+
+
+
+
+
+
+
+
+
+        /*
+
+          >======>     >=>      >=>       >====>     >=======> >=>             >>       >=>      >=>
+          >=>    >=>    >=>   >=>         >=>   >=>  >=>       >=>            >>=>       >=>    >=>
+          >=>    >=>     >=> >=>          >=>    >=> >=>       >=>           >> >=>       >=> >=>
+          >> >==>          >=>            >=>    >=> >=====>   >=>          >=>  >=>        >=>
+          >=>  >=>       >=> >=>          >=>    >=> >=>       >=>         >=====>>=>       >=>
+          >=>    >=>    >=>   >=>         >=>   >=>  >=>       >=>        >=>      >=>      >=>
+          >=>      >=> >=>      >=>       >====>     >=======> >=======> >=>        >=>     >=>
+
+        */
+
+        //**************************************************************************
+        //
+        /* RX DELAY CONTROL
+        //
+        /**************************************************************************/
+
+      `ifdef USE_RX_DELAY_CTRL_2BIT
+
+
+
+        wire rx_delay;
+        reg [13:0] rx_delay_clocks;
+
+        // TODO - check the ifndef USE_UART condition
+
+        `ifndef USE_UART
+          parameter RX_DELAY_BASE = 2400; // 80e6 (clk rate) X 30e-6 = 2400 where 30e-6 is increments of 30 microseconds
+          always @( posedge SAMPLECLK )
+          begin
+            if ( trig_in_rise ) begin
+              rx_delay_clocks <= ( RX_DELAY_BASE * rx_delay_ctrl ) + 2; // See note below
+            end
+          end
+
+          // 2 clock offset allows us to use the same !rx_delay signal to capture
+          // the waveform even when the input is indicating zero usec delay request.
+          // Using just +1 creates some jitter at the converter
+          // quite visible - probably too fast a timing somewhere.
+          // 2 clocks gets us into the 40MHz timing range, sufficiently low enough
+          // for the converter's specs.
+
+          monostable_vpw14b #(
+              //.PULSE_WIDTH( RX_DELAY_BASE * rx_delay_ctrl_val ),
+              .COUNTER_WIDTH(14)         // 2^14 = 16,384 max - for 3x rx delay base of 2400 => 7200
+          ) msv_rx_delay (
+              .pulse_width (rx_delay_clocks),
+              .clk      (SAMPLECLK),
+              .reset    (trig_in_rise),
+              .trigger  (trig_in_fall),  // was trig_in_rise
+              .pulse    (rx_delay)
+          );
+
+          wire rx_delay_rise, rx_delay_fall;
+          edge_detect edet_rx_delay (
+            .async_sig  (rx_delay),
+            .clk        (clk160), //was sclk //(clk_copy), // so far SAMPLECLK is best //clk160 should give edge lengths of 80MHz?
+            .rise       (rx_delay_rise),
+            .fall       (rx_delay_fall)
+          );
+        `endif // ifndef USE_UART
+
+        `ifdef USE_UART
+          // we are now back to 80MHz
+          //parameter RX_DELAY_BASE = 4800; // 80e6 (clk rate) X 30e-6 = 2400 where 30e-6 is increments of 30 microseconds
+          parameter RX_DELAY_BASE = 2400;
+          always @( posedge sysclk )
+          begin
+            if ( trig_in_rise ) begin
+              rx_delay_clocks <= ( RX_DELAY_BASE * rx_delay_ctrl ) + 4; // See note below
+            end
+          end
+
+          // 2 clock offset allows us to use the same !rx_delay signal to capture
+          // the waveform even when the input is indicating zero usec delay request.
+          // Using just +1 creates some jitter at the converter
+          // quite visible - probably too fast a timing somewhere.
+          // 2 clocks gets us into the 40MHz timing range, sufficiently low enough
+          // for the converter's specs.
+
+          monostable_vpw14b #(
+              //.PULSE_WIDTH( RX_DELAY_BASE * rx_delay_ctrl_val ),
+              .COUNTER_WIDTH(14)         // 2^14 = 16,384 max - for 3x rx delay base of 2400 => 7200
+          ) msv_rx_delay (
+              .pulse_width (rx_delay_clocks),
+              .clk      (sysclk),
+              .reset    (trig_in_rise),
+              .trigger  (trig_in_fall),  // was trig_in_rise
+              .pulse    (rx_delay)
+          );
+
+          wire rx_delay_rise, rx_delay_fall;
+          edge_detect edet_rx_delay (
+            .async_sig  (rx_delay),
+            .clk        (sysclk), //was sclk //(clk_copy), // so far SAMPLECLK is best //clk160 should give edge lengths of 80MHz?
+            .rise       (rx_delay_rise),
+            .fall       (rx_delay_fall)
+          );
+        `endif // ifdef USE_UART
+
+      `endif // end USE RX DELAY 2 BIT SELECTOR
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    /*
+
+    >=>        >=> >======>     >=> >===>>=====> >=======>       >===>>=====> >======>     >=>    >===>
+    >=>        >=> >=>    >=>   >=>      >=>     >=>                  >=>     >=>    >=>   >=>  >>    >=>
+    >=>   >>   >=> >=>    >=>   >=>      >=>     >=>                  >=>     >=>    >=>   >=> >=>
+    >=>  >=>   >=> >> >==>      >=>      >=>     >=====>              >=>     >> >==>      >=> >=>
+    >=> >> >=> >=> >=>  >=>     >=>      >=>     >=>                  >=>     >=>  >=>     >=> >=>   >===>
+    >> >>    >===> >=>    >=>   >=>      >=>     >=>                  >=>     >=>    >=>   >=>  >=>    >>
+    >=>        >=> >=>      >=> >=>      >=>     >=======>            >=>     >=>      >=> >=>   >====>
+
+    */
+    //**************************************************************************
+    //
+    /* TRIGD signal for CAPTURE DATA (DATAIN)
+    //
+    /**************************************************************************/
+
+      wire trigd;         // trigd = triggered =
+
+      `ifndef USE_UART
+        monostable #(
+          .PULSE_WIDTH(NSAMPLES*2),
+          .COUNTER_WIDTH(14)
+        ) msv_capt(
+          .clk          (SAMPLECLK),
+          .reset        (trig_in_rise),
+          `ifndef USE_RX_DELAY_CTRL_2BIT
+            .trigger      (trig_in_rise),
+          `endif
+          `ifdef USE_RX_DELAY_CTRL_2BIT
+            .trigger      (!rx_delay),
+          `endif
+          .pulse        (trigd)
+        );
+
+
+        `ifdef SELFREAD
+          wire trigd_rise, trigd_fall;
+          edge_detect edet_trigd (
+              .async_sig  (trigd),
+              .clk        (SAMPLECLK),
+              .rise       (trigd_rise),
+              .fall       (trigd_fall)
+          );
+        `endif
+      `endif // ifndef USE_UART
+
+      `ifdef USE_UART
+        monostable #(
+          .PULSE_WIDTH(NSAMPLES*4),
+          .COUNTER_WIDTH(16)
+        ) msv_capt(
+          .clk          (sysclk),
+          .reset        (trig_in_rise),
+          `ifndef USE_RX_DELAY_CTRL_2BIT
+            .trigger      (trig_in_rise),
+          `endif
+          `ifdef USE_RX_DELAY_CTRL_2BIT
+            // TODO now that msv is not edge sensitive we have to watch for idle 0 conditions that trigger the trigd pulse
+            .trigger      (rx_delay_fall), //(!rx_delay),
+          `endif
+          .pulse        (trigd)
+        );
+
+        `ifdef SELFREAD
+          wire trigd_rise, trigd_fall;
+          edge_detect edet_trigd (
+              .async_sig  (trigd),
+              .clk        (sysclk),
+              .rise       (trigd_rise),
+              .fall       (trigd_fall)
+          );
+        `endif
+
+      `endif // ifndef USE_UART
+
+
+
+
+
+
+      /*
+
+      >======>     >=======>       >>       >====>           >===>>=====> >======>     >=>    >===>
+      >=>    >=>   >=>            >>=>      >=>   >=>             >=>     >=>    >=>   >=>  >>    >=>
+      >=>    >=>   >=>           >> >=>     >=>    >=>            >=>     >=>    >=>   >=> >=>
+      >> >==>      >=====>      >=>  >=>    >=>    >=>            >=>     >> >==>      >=> >=>
+      >=>  >=>     >=>         >=====>>=>   >=>    >=>            >=>     >=>  >=>     >=> >=>   >===>
+      >=>    >=>   >=>        >=>      >=>  >=>   >=>             >=>     >=>    >=>   >=>  >=>    >>
+      >=>      >=> >=======> >=>        >=> >====>                >=>     >=>      >=> >=>   >====>
+
+      */
+
+      //*************************************************************************
+      //
+      // NEW_CAPT (FRESH DATA READY TO READ OUT)
+      //
+      //*************************************************************************
+
+      `ifdef SELFREAD
+        reg new_capt = 0; // 0 is only for sim purposes, should be cleared on h/w reset
+
+        `ifndef USE_UART
+          always @( posedge SAMPLECLK )
+          begin
+            if ( trigd_fall ) begin
+              new_capt <= 1'b 1;
+            end
+            if ( addr_rd_nxt == NSAMPLES ) begin
+              new_capt <= 1'b 0;
+            end
+          end
+        `endif // ifndef USE_UART
+
+        `ifdef USE_UART
+          always @( posedge sysclk )
+          begin
+            if ( trigd_fall ) begin
+              new_capt <= 1'b 1;
+            end
+            if ( addr_rd_nxt == NSAMPLES ) begin
+              new_capt <= 1'b 0;
+            end
+          end
+        `endif // ifdef USE_UART
+
+      `endif // ifdef SELFREAD
+
+
 
 
 
@@ -639,8 +989,10 @@ module top (
       // TODOFUTURE: We could rework the UART module to perhaps condense somewhat
       // Anyway: at baud 2Mbps, 13 cycles is: 2Mbps/13 = 153,846 (oy)
       // So: 160MHz / 153k = 1046 => /2 = 523
-      parameter period_read_mem_uart = 32'd 523; //32'd 420;
-      always @ (posedge clk160) begin
+      // We are back to 80MHz so:
+      //parameter period_read_mem_uart = 32'd 523; //32'd 420;
+      parameter period_read_mem_uart = 32'd 262;
+      always @ (posedge sysclk) begin
           cntr_read_mem_uart <= cntr_read_mem_uart + 1;
           if (cntr_read_mem_uart == period_read_mem_uart) begin
               // Another divide Hz by 2
@@ -672,24 +1024,11 @@ module top (
       // new_capt means there is complete data ready to read out that has not yet been completely read out
       assign read_mem_uart = (clk_read_mem_uart & new_capt);
 
-      // clk160 condition for reading memory seemed to fail and provide blank output
-      // using a block read at the slow clock of the read_mem_uart seems to capture
-      // correctly the memory address such that the value is readily available for a
-      // non-blocking read in the main output section
-      reg [7:0] next_byte;
-      always @ ( posedge read_mem_uart ) begin
-        next_byte = mem[addr_rd];
-      end
-
       wire read_mem_uart_rise, read_mem_uart_fall;
-      // Testing:
-      `ifdef TEST_TIMING_TO_PIN_OUTPUT
-        //buf(PDO0, read_mem_uart_rise);
-        assign PDO0 = read_mem_uart_rise;
-      `endif
+
       edge_detect edet_self_read_mem_uart (
           .async_sig  (read_mem_uart),
-          .clk        (clk160), // Using SAMPLECLK 40 MHz pulse width created, based on scope measurement of output signal
+          .clk        (sysclk), // Using SAMPLECLK 40 MHz pulse width created, based on scope measurement of output signal
           .rise       (read_mem_uart_rise),
           .fall       (read_mem_uart_fall)
       );
@@ -699,14 +1038,14 @@ module top (
         .PULSE_WIDTH(period_read_mem_uart/2), // yes rounding/truncation will happen - but we just a delayed signal
         .COUNTER_WIDTH(10)                    // 10 wires for up to count of 32
       ) msv_rd_addr_update_msv (
-        .clk        (clk160),
+        .clk        (sysclk),
         .reset      (read_mem_uart_rise),
         .trigger    (read_mem_uart_fall),
         .pulse      (rd_addr_update_msv)
       );
       edge_detect edet_rd_addr_update (
           .async_sig  (rd_addr_update_msv),
-          .clk        (clk160),
+          .clk        (sysclk),
           .rise       (rd_addr_update_rise),
           .fall       (rd_addr_update_fall)
       );
@@ -1217,255 +1556,6 @@ module top (
 
 
 
-    /*
-
-      >======>     >=>      >=>       >====>     >=======> >=>             >>       >=>      >=>
-      >=>    >=>    >=>   >=>         >=>   >=>  >=>       >=>            >>=>       >=>    >=>
-      >=>    >=>     >=> >=>          >=>    >=> >=>       >=>           >> >=>       >=> >=>
-      >> >==>          >=>            >=>    >=> >=====>   >=>          >=>  >=>        >=>
-      >=>  >=>       >=> >=>          >=>    >=> >=>       >=>         >=====>>=>       >=>
-      >=>    >=>    >=>   >=>         >=>   >=>  >=>       >=>        >=>      >=>      >=>
-      >=>      >=> >=>      >=>       >====>     >=======> >=======> >=>        >=>     >=>
-
-    */
-
-    //**************************************************************************
-    //
-    /* RX DELAY CONTROL
-    //
-    /**************************************************************************/
-
-  `ifdef USE_RX_DELAY_CTRL_2BIT
-
-
-
-    wire rx_delay;
-    reg [13:0] rx_delay_clocks;
-
-    // TODO - check the ifndef USE_UART condition
-
-    `ifndef USE_UART
-      parameter RX_DELAY_BASE = 2400; // 80e6 (clk rate) X 30e-6 = 2400 where 30e-6 is increments of 30 microseconds
-      always @( posedge SAMPLECLK )
-      begin
-        if ( trig_in_rise ) begin
-          rx_delay_clocks <= ( RX_DELAY_BASE * rx_delay_ctrl ) + 2; // See note below
-        end
-      end
-
-      // 2 clock offset allows us to use the same !rx_delay signal to capture
-      // the waveform even when the input is indicating zero usec delay request.
-      // Using just +1 creates some jitter at the converter
-      // quite visible - probably too fast a timing somewhere.
-      // 2 clocks gets us into the 40MHz timing range, sufficiently low enough
-      // for the converter's specs.
-
-      monostable_vpw14b #(
-          //.PULSE_WIDTH( RX_DELAY_BASE * rx_delay_ctrl_val ),
-          .COUNTER_WIDTH(14)         // 2^14 = 16,384 max - for 3x rx delay base of 2400 => 7200
-      ) msv_rx_delay (
-          .pulse_width (rx_delay_clocks),
-          .clk      (SAMPLECLK),
-          .reset    (trig_in_rise),
-          .trigger  (trig_in_fall),  // was trig_in_rise
-          .pulse    (rx_delay)
-      );
-
-      wire rx_delay_rise, rx_delay_fall;
-      edge_detect edet_rx_delay (
-        .async_sig  (rx_delay),
-        .clk        (clk160), //was sclk //(clk_copy), // so far SAMPLECLK is best //clk160 should give edge lengths of 80MHz?
-        .rise       (rx_delay_rise),
-        .fall       (rx_delay_fall)
-      );
-    `endif // ifndef USE_UART
-
-    `ifdef USE_UART
-      parameter RX_DELAY_BASE = 4800; // 80e6 (clk rate) X 30e-6 = 2400 where 30e-6 is increments of 30 microseconds
-      always @( posedge clk160 )
-      begin
-        if ( trig_in_rise ) begin
-          rx_delay_clocks <= ( RX_DELAY_BASE * rx_delay_ctrl ) + 4; // See note below
-        end
-      end
-
-      // 2 clock offset allows us to use the same !rx_delay signal to capture
-      // the waveform even when the input is indicating zero usec delay request.
-      // Using just +1 creates some jitter at the converter
-      // quite visible - probably too fast a timing somewhere.
-      // 2 clocks gets us into the 40MHz timing range, sufficiently low enough
-      // for the converter's specs.
-
-      monostable_vpw14b #(
-          //.PULSE_WIDTH( RX_DELAY_BASE * rx_delay_ctrl_val ),
-          .COUNTER_WIDTH(14)         // 2^14 = 16,384 max - for 3x rx delay base of 2400 => 7200
-      ) msv_rx_delay (
-          .pulse_width (rx_delay_clocks),
-          .clk      (clk160),
-          .reset    (trig_in_rise),
-          .trigger  (trig_in_fall),  // was trig_in_rise
-          .pulse    (rx_delay)
-      );
-
-      wire rx_delay_rise, rx_delay_fall;
-      edge_detect edet_rx_delay (
-        .async_sig  (rx_delay),
-        .clk        (clk160), //was sclk //(clk_copy), // so far SAMPLECLK is best //clk160 should give edge lengths of 80MHz?
-        .rise       (rx_delay_rise),
-        .fall       (rx_delay_fall)
-      );
-    `endif // ifdef USE_UART
-
-  `endif // end USE RX DELAY 2 BIT SELECTOR
-
-
-
-
-
-
-
-
-
-  /*
-
-    >===>>=====> >======>     >=>    >===>    >====>
-        >=>     >=>    >=>   >=>  >>    >=>  >=>   >=>
-        >=>     >=>    >=>   >=> >=>         >=>    >=>
-        >=>     >> >==>      >=> >=>         >=>    >=>
-        >=>     >=>  >=>     >=> >=>   >===> >=>    >=>
-        >=>     >=>    >=>   >=>  >=>    >>  >=>   >=>
-        >=>     >=>      >=> >=>   >====>    >====>
-
-  */
-
-  //*************************************************************************
-  //
-  /* TRIGGER INPUT SIGNAL MANAGEMENT AND GENERATION
-  //
-  /*************************************************************************/
-
-  // https://electronics.stackexchange.com/questions/26502/verilog-check-for-two-negedges-in-always-block
-  // TODO !!!: Probably should update this to be USE_UART case-dependent
-  monostable #(
-    .PULSE_WIDTH(5),              // 160MHz/32 = 5 for 32MHz operation of the MCU
-    .COUNTER_WIDTH(4)
-  ) msv_trig_in (
-    .clk          (clk160),
-    .reset        (reset),
-    .trigger      (ext_trig_in),
-    .pulse        (trig_in)
-  );
-  edge_detect edet_trig_in (
-    .async_sig  (trig_in),
-    .clk        (clk160), //was sclk //(clk_copy), // so far SAMPLECLK is best //clk160 should give edge lengths of 80MHz?
-    .rise       (trig_in_rise),
-    .fall       (trig_in_fall)
-  );
-  // This was (above) all just only the external signal just feeding into the
-  // edge_detect directly, and using sclk instead of SAMPLECLK
-
-
-
-  //**************************************************************************
-  //
-  /* TRIGD signal for CAPTURE DATA (DATAIN)
-  //
-  /**************************************************************************/
-
-    wire trigd;         // trigd = triggered =
-
-    `ifndef USE_UART
-      monostable #(
-        .PULSE_WIDTH(NSAMPLES*2),
-        .COUNTER_WIDTH(14)
-      ) msv_capt(
-        .clk          (SAMPLECLK),
-        .reset        (trig_in_rise),
-        `ifndef USE_RX_DELAY_CTRL_2BIT
-          .trigger      (trig_in_rise),
-        `endif
-        `ifdef USE_RX_DELAY_CTRL_2BIT
-          .trigger      (!rx_delay),
-        `endif
-        .pulse        (trigd)
-      );
-
-
-      `ifdef SELFREAD
-        wire trigd_rise, trigd_fall;
-        edge_detect edet_trigd (
-            .async_sig  (trigd),
-            .clk        (SAMPLECLK),
-            .rise       (trigd_rise),
-            .fall       (trigd_fall)
-        );
-      `endif
-    `endif // ifndef USE_UART
-
-    `ifdef USE_UART
-      monostable #(
-        .PULSE_WIDTH(NSAMPLES*4),
-        .COUNTER_WIDTH(16)
-      ) msv_capt(
-        .clk          (clk160),
-        .reset        (trig_in_rise),
-        `ifndef USE_RX_DELAY_CTRL_2BIT
-          .trigger      (trig_in_rise),
-        `endif
-        `ifdef USE_RX_DELAY_CTRL_2BIT
-          // TODO now that msv is not edge sensitive we have to watch for idle 0 conditions that trigger the trigd pulse
-          .trigger      (rx_delay_fall), //(!rx_delay),
-        `endif
-        .pulse        (trigd)
-      );
-
-      `ifdef SELFREAD
-        wire trigd_rise, trigd_fall;
-        edge_detect edet_trigd (
-            .async_sig  (trigd),
-            .clk        (clk160),
-            .rise       (trigd_rise),
-            .fall       (trigd_fall)
-        );
-      `endif
-
-    `endif // ifndef USE_UART
-
-    //*************************************************************************
-    //
-    // NEW_CAPT (FRESH DATA READY TO READ OUT)
-    //
-    //*************************************************************************
-
-    `ifdef SELFREAD
-      reg new_capt = 0; // 0 is only for sim purposes, should be cleared on h/w reset
-      buf(PDO3, trigd);
-
-      `ifndef USE_UART
-        always @( posedge SAMPLECLK )
-        begin
-          if ( trigd_fall ) begin
-            new_capt <= 1'b 1;
-          end
-          if ( addr_rd_nxt == NSAMPLES ) begin
-            new_capt <= 1'b 0;
-          end
-        end
-      `endif // ifndef USE_UART
-
-      `ifdef USE_UART
-        always @( posedge clk160 )
-        begin
-          if ( trigd_fall ) begin
-            new_capt <= 1'b 1;
-          end
-          if ( addr_rd_nxt == NSAMPLES ) begin
-            new_capt <= 1'b 0;
-          end
-        end
-      `endif // ifdef USE_UART
-
-    `endif // ifdef SELFREAD
 
 
 
@@ -1488,8 +1578,8 @@ module top (
   `endif
 
 
-
-  //`ifdef SELFREAD | SYNC_SELFREAD_WITH_CLOCKED_OUT
+  `ifndef USE_UART
+    //`ifdef SELFREAD | SYNC_SELFREAD_WITH_CLOCKED_OUT
     // Create this signal regardless, not getting || macro ifdefs to work yet ...
     // At 1.25MHz output write strobe rate, half a cycle is 400ns clock pulse width
     // For an 80MHz clock (12.5ns full cycle), that is:
@@ -1512,7 +1602,7 @@ module top (
         .data_out   (read_mem_shifted)
     );
     //`endif
-
+  `endif // ifndef USE_UART
 
 
     `ifndef SELFREAD
@@ -1578,12 +1668,14 @@ module top (
     `endif // ifndef USE_UART
 
     `ifdef USE_UART
-      always @( posedge clk160 )   // Was SAMPLECLK
+      always @( posedge sysclk )   // Was SAMPLECLK
       begin
         if ( trig_in_rise ) begin     // Was trig_in_rise
           addr_rd_nxt <= 12'b 0000_0000_0000;
         end else if ( read_mem_uart_rise ) begin
           addr_rd_nxt <= (addr_rd + 1'b 1);
+        end else begin
+          addr_rd_nxt <= addr_rd_nxt; // new
         end
       end
     `endif // ifdef USE_UART
@@ -1612,11 +1704,13 @@ module top (
     //
     //*************************************************************************
 
-    `ifdef DATA_TEST_INCREMENT_VALUES
-      reg [11:0] test_val, test_val_next;
+    //`ifdef DATA_TEST_INCREMENT_VALUES
+      // TODO!!! Next line allows better functioning even though not used??????
+      //reg [11:0] test_val, test_val_next;
+      //reg [3:0] blah, blah_blah; // 2 reg's then unused ... creates more working ish - the closer to the first line the more working ish !!!
       //reg [7:0] test_val_8bit;
       //assign test_val_8bit = {test_val[7:0]};
-    `endif // ifdef DATA_TEST_INCREMENT_VALUES
+    //`endif // ifdef DATA_TEST_INCREMENT_VALUES
 
     `ifndef USE_UART
       always @( posedge SAMPLECLK )
@@ -1636,18 +1730,27 @@ module top (
     `endif // ifndef USE_UART
 
     `ifdef USE_UART
-      always @( posedge clk160 ) // SAMPLECLK )
+      //always @( posedge sysclk ) // SAMPLECLK )
+      wire write_addr_incr_clk;
+      assign write_addr_incr_clk = ( trigd & adc_encode );
+
+      // Please IEEE 1364.1 5.2.2.x for correct formulation
+      // Yosys rightly doesn't support dual async edge-triggered units
+      // and with other variants of below you should see build errors
+      // https://github.com/YosysHQ/yosys/issues/662
+      always @ ( posedge trig_in_rise or posedge write_addr_incr_clk)
       begin
         if ( trig_in_rise ) begin
           addr_wr_nxt <= 12'b 0000_0000_0000;
-          `ifdef DATA_TEST_INCREMENT_VALUES
-            test_val_next <= 12'b 0000_0000_0000;
-          `endif // ifdef DATA_TEST_INCREMENT_VALUES
-        end else if ( trigd && adc_encode  ) begin
-          addr_wr_nxt <= (addr_wr + 1'b 1);
-          `ifdef DATA_TEST_INCREMENT_VALUES
-            test_val_next <= (test_val + 1'b 1);
-          `endif // ifdef DATA_TEST_INCREMENT_VALUES
+          //`ifdef DATA_TEST_INCREMENT_VALUES
+          //  test_val_next <= 12'b 0000_0000_0000;
+          //`endif // ifdef DATA_TEST_INCREMENT_VALUES
+        //end else if ( trigd & adc_encode  ) begin
+        end else begin //if ( write_addr_incr_clk ) begin // yes we need this event here to compile
+          addr_wr_nxt <= (addr_wr + 1); //1'b 1);
+          //`ifdef DATA_TEST_INCREMENT_VALUES
+          //  test_val_next <= (test_val + 1'b 1);
+          //`endif // ifdef DATA_TEST_INCREMENT_VALUES
         end
       end
     `endif // ifndef USE_UART
@@ -1685,12 +1788,12 @@ module top (
 
         if ( trigd ) begin
           addr_wr <= addr_wr_nxt; // Is this right? was commented during UART dev ....
-          `ifndef DATA_TEST_INCREMENT_VALUES
+          //`ifndef DATA_TEST_INCREMENT_VALUES
             mem[addr_wr] <= data_in;
-          `endif
-          `ifdef DATA_TEST_INCREMENT_VALUES
-            mem[addr_wr] <= addr_wr[7:0];// test_val_8bit;
-          `endif
+          //`endif
+          //`ifdef DATA_TEST_INCREMENT_VALUES
+          //  mem[addr_wr] <= addr_wr[7:0];// test_val_8bit;
+          //`endif
         end
 
       end
@@ -1698,37 +1801,46 @@ module top (
 
     `ifdef USE_UART
       // This will give a half delay?
-      //(* keep *) wire delayed_capture_clk; // yes this works for POST sim so far
+      //(* keep *) wire delayed_capture_clk; // yes this works for POST sim so far // interestingly it also effects the PDO output pin presence of this signal too!
+      // That is, it will be optimized out - AND we lose the signal on the output pin! WHY???
       wire delayed_capture_clk; // yes this works for POST sim so far
-      // Delay until data good at the converter
-      //// (* keep *) should prevent pruning when otherwise pruned
-      // but use that with caution
-      // (* keep *)
-      assign delayed_capture_clk = ( ~sclk && SAMPLECLK ); // && ~clk160 );
+      // Delay until data good at the converter?
+      assign delayed_capture_clk = ( ~sclk & SAMPLECLK ); // && ~clk160 );
 
       // We move this to a separate block and use block assignments
       // hopefully to allow for RAM write timing
       // It seems to have made the difference
-      always @ ( posedge clk160 ) begin
-        if ( trigd && delayed_capture_clk ) begin
+      wire write_enable;
+      assign write_enable = ( trigd & delayed_capture_clk );
+
+      //always @ ( posedge sysclk ) begin
+      always @ ( posedge write_enable ) begin
+        //if ( write_enable ) begin
         `ifndef TEST_NO_BRAM
-          `ifndef DATA_TEST_INCREMENT_VALUES
-            mem[addr_wr] = data_in;
-          `endif
-          `ifdef DATA_TEST_INCREMENT_VALUES
-            // Even though yosys gives warning that it actually treats as non-blocking
-            // this code actually works at the moment
-            mem[addr_wr] = (addr_wr[7:0] | 8'b 1000_0000);// test_val_8bit; // for checking if it's writing when read
-          `endif
+          //`ifndef DATA_TEST_INCREMENT_VALUES // TODO
+            mem[addr_wr] <= data_in;
+          //`endif
+          //`ifdef DATA_TEST_INCREMENT_VALUES
+          //  mem[addr_wr] <= (addr_wr[7:0] | 8'b 1000_0000);
+          //`endif
         `endif // ifndef TEST_NO_BRAM
+        //end // if write_enable
+      end
+
+
+      always @ ( posedge trig_in_rise, posedge write_addr_incr_clk) begin
+        if ( trig_in_rise ) begin
+          addr_wr <= 0;
+        end else begin
+          addr_wr <= addr_wr_nxt;
         end
       end
 
 
-      always @( posedge clk160 ) //  delayed_capture_clk )
+      /*always @( posedge sysclk ) //  delayed_capture_clk )
       begin
 
-        if ( trigd && delayed_capture_clk ) begin
+        if ( write_enable ) begin //trigd & delayed_capture_clk ) begin
           addr_wr <= addr_wr_nxt;
           // NOTE: Yosys doesn't like synthesis translate_on/off
           // like ... I agree - using just MACROs then ...
@@ -1743,9 +1855,9 @@ module top (
           `endif // ifndef TEST_NO_BRAM
           //// NOsynthesisNOtranslateNOon
           */
-        end
+        //end
 
-      end
+      //end*/
     `endif // ifndef USE_UART
 
 
@@ -1764,6 +1876,7 @@ module top (
 
 
 
+
     /*
 
       >=>>=>       >===>      >=======>
@@ -1772,7 +1885,7 @@ module top (
        >=>     >=>        >=> >=====>
           >=>  >=>        >=> >=>
     >=>    >=>   >=>     >=>  >=>
-     >=>>=>       >===>      >=>
+      >=>>=>       >===>      >=>
 
     */
     /***************************************************************************
@@ -1789,7 +1902,8 @@ module top (
     // TODO - module?
     // And confirm
     `ifndef TEST_NO_BRAM
-      reg [7:0] sof [0:11];               // 12-byte start of frame
+      //(* keep *) reg [7:0] sof [0:11];               // 12-byte start of frame
+      reg [7:0] sof [0:11];
       // For individual clock cycle timing verifications or auto sync, on the
       // serial comms output end, you may wish to use values like:
       // 0x55 or 0xaa for some sync or SOF bytes
@@ -1798,12 +1912,39 @@ module top (
       // delimiters.
       // aa = 170
       // 55 = 85
+      // If not using BRAM, like -nobram for SIM then these are not RAMs
+      // and thus init doesn't seem to work - at least array is pruned
+      // Though for h/w synth yosys supports putting this into RAM using initial block here
+
+      // Works for real h/w (using BRAM), not for SIM - haven't tried init'ing the
+      // missing sof[x]'s though for SIM functionality (filled up auto to zero in BRAM real h/w synth though )
+      /*
       initial begin
         sof[0] <= 8'h aa;
         sof[1] <= 8'h 55;
         sof[2] <= 8'h aa;
         sof[3] <= 8'h 55;
 
+        sof[8] <= 8'h ff;
+        sof[9] <= 8'h 00;
+        sof[10] <= 8'h ff;
+        sof[11] <= 8'h 00;
+      end
+      */
+
+      // Added to try keeping SIM close to h/w synth
+      // Yes, this works for SIM - as long as added the missing sof's
+      // Also works in real h/w synth - haven't checked yet if it gets replaced
+      // by BRAM in real h/w synth yet though - could be
+      always @ ( posedge trig_in_rise ) begin
+        sof[0] <= 8'h aa;
+        sof[1] <= 8'h 55;
+        sof[2] <= 8'h aa;
+        sof[3] <= 8'h 55;
+        sof[4] <= 8'h 00;
+        sof[5] <= 8'h 00;
+        sof[6] <= 8'h 00;
+        sof[7] <= 8'h 00;
         sof[8] <= 8'h ff;
         sof[9] <= 8'h 00;
         sof[10] <= 8'h ff;
@@ -1836,58 +1977,12 @@ module top (
     /***************************************************************************/
 
     `ifdef USE_UART
-      reg [7:0] uart_txbyte = 0; // To show uncertainty, remove the init
-      // = ASCII_0; // init to a non-zero value doesn't work on this h/w
-      //`endif // ifdef USE_UART
-
-
-
-      /*always @ ( posedge clk160 ) begin
-        if ( reset ) begin
-          seq_id <= 0; // reset this too so nxt doesn't get the incremented value on trigger
-        end else begin
-          if ( read_mem_uart_rise ) begin
-
-          end
-        end
-      end*/
+      reg [7:0] uart_txbyte = 0; // To show uncertainty in SIM, remove the init; inits don't work in real h/w
     `endif // ifdef USE_UART
 
 
-    always @( posedge clk160 ) // was: SAMPLECLK )
-    begin
-
-      // TODO could rework this
-      // Currently addressed via MCU n_reset signal timing
-      // However, with prior n_reset timing from the MCU that is now an extended
-      // active low signal that gets set back to high only just before
-      // the next channel cycle starts over again
-      // Otherwise, with prior on the MCU timing, sometimes the
-      // seq_id_nxt reset to 00 is not captured persistently correctly
-      // so channel numbers climb higher until the next sequence of 8 or 8*n
-
-      // Manage the sequence number, resetting if that signal is there
-      // or incrementing at EACH NEW CAPTURE (Waveform)
-      //if ( n_reset == 1'b 0 ) begin // if !RST (active low)
-      if ( reset ) begin
-        seq_id_nxt <= 8'h 00;
-      end else begin
-        if ( trig_in_rise ) begin  // was not nested, rather end else if
-          seq_id_nxt <= seq_id + 1;
-        end
-      end
-
-
-
-      // Was here:
-      /*if ( trigd ) begin
-        addr_wr <= addr_wr_nxt;
-        `ifdef DATA_TEST_INCREMENT_VALUES
-          test_val <= test_val_next;
-        `endif // ifdef DATA_TEST_INCREMENT_VALUES
-      end*/
-
-      `ifndef USE_UART
+    `ifndef USE_UART
+      always @ ( posedge SAMPLECLK ) begin
         if ( read_mem ) begin
           if ( addr_rd == 4 ) begin
             addr_rd <= addr_rd_nxt;
@@ -1901,87 +1996,81 @@ module top (
             val <= mem[addr_rd];          // To test correct addr_rd handling: <= addr_rd[7:0] etc.
           end
         end
-      `endif // ifndef USE_UART
+      end
+    `endif // ifndef USE_UART
 
-      `ifdef USE_UART
-        // Need just the rise signal duration otherwise the plain
-        // read_mem_uart is long and includes 3-ish (or whatever is the current
-        // timing implementation of UART send intervals) increments of the
-        // read address, addr_rd
+
+
+      always @ ( posedge reset, posedge trig_in_rise ) begin
+
+        if ( reset ) begin
+          seq_id <= 8'h 00;
+        end else begin
+          seq_id <= seq_id + 1;
+        end
+
+      end
+
+
+
+
+      always @ ( posedge trig_in_rise, posedge rd_addr_update_fall ) begin
 
         if ( trig_in_rise ) begin
           addr_rd <= 12'b 0;
         end else begin
+          addr_rd <= addr_rd_nxt;
+        end
 
-          // New uart implementation to catch th rd_addr update early
-          // There are of course many ways to do this
-          if ( rd_addr_update_fall ) begin
-            addr_rd <= addr_rd_nxt;  // TODOFUTURE: Wow really should make naming more consistent/convetion-based! now
-          end
+      end
 
-          //if ( reset ) begin
-          //  seq_id <= 0; // reset this too so nxt doesn't get the incremented value on trigger
-          //end
 
-          if ( read_mem_uart_fall ) begin
-            if ( addr_rd == 4 ) begin
-              //addr_rd <= addr_rd_nxt;
-              seq_id <= seq_id_nxt;
-              uart_txbyte <= seq_id;
-            end else if ( addr_rd < 12 ) begin
-              //addr_rd <= addr_rd_nxt;
-              `ifndef TEST_NO_BRAM
-                //// NOsynthesisNOtranslateNOoff
-                uart_txbyte <= sof[addr_rd];
-                //// NOsynthesisNOtranslateNOon
-              `endif // ifndef TEST_NO_BRAM
-            end else begin
 
-              //addr_rd <= addr_rd_nxt;
+      // clk160 condition for reading memory seemed to fail and provide blank output
+      // using a block read at the slow clock of the read_mem_uart seems to capture
+      // correctly the memory address such that the value is readily available for a
+      // non-blocking read in the main output section
+      // Was blocking (=) ... changed to non-blocking
+      reg [7:0] next_byte;
+      always @ ( posedge read_mem_uart ) begin
+        //next_byte <= next_byte + 1; // works  // mem[addr_rd];
+        //next_byte <= addr_rd[7:0]; // works
+        next_byte <= mem[addr_rd];
+      end
 
-              // Just testing output of the read address:
-              //uart_txbyte <= addr_rd[7:0];
 
-              // read real value or whatever is put into memory
-              //uart_txbyte <= mem[addr_rd];
 
-              `ifndef TEST_NO_BRAM
-                //// NOsynthesisNOtranslateNOoff
-                // Real memory read
-                // mem[something]
-                // is what is meant here
-                //uart_txbyte <= mem[addr_rd];
-                //uart_txbyte <= addr_rd[7:0];
-                uart_txbyte <= next_byte;
-                //// NOsynthesisNOtranslateNOon
-              `else
-                uart_txbyte <= addr_rd[7:0];
-              `endif //ifndef TEST_NO_BRAM
+      //always @ ( posedge sysclk ) begin
+      always @ ( posedge read_mem_uart_fall ) begin
 
-            end
-          end
+        //if ( read_mem_uart_fall ) begin
 
-          /*
-          if ( read_mem_uart_rise ) begin   // was fall
-            //mem[anything] right now doesn't work - blank output - race condition? etc?
+          if ( addr_rd == 4 ) begin
+            uart_txbyte <= seq_id;
+          end else if ( addr_rd < 12 ) begin
+
             `ifndef TEST_NO_BRAM
-              //// NOsynthesisNOtranslateNOoff
-              //uart_txbyte <= mem[addr_rd];
-              uart_txbyte <= addr_rd[7:0];
-              //// NOsynthesisNOtranslateNOon
+              uart_txbyte <= sof[addr_rd];
+            `else // ifndef TEST_NO_BRAM
+              uart_txbyte <= 8'h aa;
+            `endif
+
+          end else begin
+
+            `ifndef TEST_NO_BRAM
+              uart_txbyte <= next_byte;
             `else
               uart_txbyte <= addr_rd[7:0];
             `endif //ifndef TEST_NO_BRAM
-          end
-          */
 
-        end // if read_mem_uart_fall
+          end // addr_rd case ifs
 
+        //end // read_mem_uart_fall
 
+      end // always
 
-      `endif // ifndef USE_UART
+    //`endif // ifndef USE_UART
 
-    end // always @ posedge clk160
 
 
     // Back to the LED flasher test code, left-overs
@@ -2092,7 +2181,8 @@ module top (
       // or sometimes
       reg clk_baud_fastest = 0;
       reg [31:0] cntr_fastest = 32'b0;
-      parameter period_fastest = 40;
+      //parameter period_fastest = 40;  // for 160MHz clk in  but that's too fast for the larger counters
+      parameter period_fastest = 20;  // 2Mbps ish
       // 44: 1,818,181.8...
       // 43: Toggle at 160MHz / 43 => divide once more by two for the rate since
       //     this is a toggle (output test ok)
@@ -2102,7 +2192,7 @@ module top (
       // 40: 2MBps
       // Remember baud rate must work for 10-bits and the read_mem_uart_rise ferquency (interval between bytes transmitted basically)
 
-      always @ ( posedge clk160 ) begin
+      always @ ( posedge sysclk ) begin
         if ( trigd_fall ) begin
           cntr_fastest <= 32'b0;
         end else begin
@@ -2193,7 +2283,7 @@ module top (
           .PULSE_WIDTH(period_tx_send_pulse),
           .COUNTER_WIDTH(32)
         ) msv_uart_send_pulse (
-          .clk          (clk160),
+          .clk          (sysclk),
           .reset        (trig_in_rise),
           .trigger      (read_mem_uart_fall), //read_mem_uart_fall? read_mem_uart?
           .pulse        (uart_send)
@@ -2219,7 +2309,7 @@ module top (
       //reg always_uart_send = 1'b1;
 
       // Yes - it likey's the latched value (the uart transmitter does it seems)
-      always @ ( posedge clk160 ) begin
+      always @ ( posedge sysclk ) begin
           uart_send_reg <= uart_send;
       end
 
@@ -2228,9 +2318,6 @@ module top (
       // When it does fire it is about 3.7MHz (3.68MHz)
       // And it is idling at 0
       // OK and yes sometimes it does fire and there is still no uart output
-      buf(PDO1, uart_send);
-
-      buf(PDO2, clk_baud);
 
       uart_tx_8n1 transmitter (
 
@@ -2285,7 +2372,42 @@ module top (
 
 
 
+
+
+
+        /*
+
+            >===>      >=>     >=> >===>>=====>       >===>>=====> >=======>   >=>>=>   >===>>=====>
+          >=>    >=>   >=>     >=>      >=>                >=>     >=>       >=>    >=>      >=>
+        >=>        >=> >=>     >=>      >=>                >=>     >=>        >=>            >=>
+        >=>        >=> >=>     >=>      >=>                >=>     >=====>      >=>          >=>
+        >=>        >=> >=>     >=>      >=>                >=>     >=>             >=>       >=>
+          >=>     >=>  >=>     >=>      >=>                >=>     >=>       >=>    >=>      >=>
+            >===>        >====>         >=>                >=>     >=======>   >=>>=>        >=>
+
+        */
+
+        `ifdef TEST_TIMING_TO_PIN_OUTPUT
+          buf(PDO0, trig_in_rise);
+          buf(PDO1, trigd);
+          buf(PDO2, write_enable); //trig_in_rise);
+          buf(PDO3, uart_send);
+        `endif
+
+
+
+
+
+
+
 endmodule // top
+
+
+
+
+
+
+
 
 
 
@@ -2935,7 +3057,7 @@ endmodule
 
 
 
-module monostable (
+/*module monostable (
         input clk,
         input reset,
         input trigger,
@@ -2945,64 +3067,27 @@ module monostable (
         parameter PULSE_WIDTH = 0;      // e.g. 4096 for 12-bit counter (0 to 4095 + 1)
         parameter COUNTER_WIDTH = 0;     // e.g. 13 to capture extra bit for 4096 sample intervals
 
-        reg [COUNTER_WIDTH-1:0] count = 0; // TODO parameterize
+        reg [COUNTER_WIDTH-1:0] count = 0;
 
-        // In this case, we modify to ignore any reset signal
-        // We just want trigger and then reset on reach max count
-        // Or maybe we need the reset signal - it seems reset use of this msv is
-        // getting pruned for non-use
-        // WAS:
-        /*wire count_rst = (count == PULSE_WIDTH); //reset | (count == PULSE_WIDTH);
-
-        always @ (posedge trigger, posedge count_rst) begin
-                if (count_rst) begin
-                        pulse <= 1'b0;
-                end else begin
-                        pulse <= 1'b1;
-                end
-        end
-
-        always @ (posedge clk, posedge count_rst) begin
-                if(count_rst) begin
-                        count <= 0;
-                end else begin
-                    if(pulse) begin
-                            count <= count + 1'b1;
-                    end
-                end
-        end
-        */
-
-
-        // Here a short trigger is needed because the pulse duration
-        // will include the time for wich the trigger is on
-        // If the reset signal is not used, say it is always 0
-        // then pulse should still be 0 (last clause here)
-        // And yes, in our testing so far for UART, this brought back to life
-        // the previously pruned actual top level reset signal implementation
-        // Though we now need to rework other instances of the MSV probably
-        //reg triggered = 1'b 0;
         always @ (posedge clk) begin
           if ( reset ) begin
             count <= 0;
             pulse <= 1'b 0;
-            //triggered <= 1'b 0;
           end else begin
             if ( trigger ) begin
-              count <= count + 1;
+              count <= count + 1'b 1;
               pulse <= 1'b 1;
-              //triggered <= 1'b 1;
-            end else if ( (count != PULSE_WIDTH) && pulse ) begin // triggered ) begin
-              count <= count + 1;
+            end else if ( (count != PULSE_WIDTH) && (pulse == 1'b 1) ) begin
+              count <= count + 1'b 1;
+              pulse <= 1'b 1;
             end else begin
               pulse <= 1'b 0;
-              //triggered <= 1'b 0;
               count <= 0; // make this retriggerable without reset
             end
           end
         end
 
-endmodule
+endmodule*/
 
 
 

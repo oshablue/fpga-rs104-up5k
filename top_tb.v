@@ -8,6 +8,7 @@
 // https://stackoverflow.com/questions/35927650/is-it-possible-to-create-a-simulation-waveform-from-yosys-output
 // http://www.clifford.at/yosys/files/yosys_manual.pdf
 // https://github.com/cliffordwolf/icotools/blob/master/examples/icezero/testbench.v
+// https://stackoverflow.com/questions/45172834/how-to-run-post-synthesis-simulation-with-the-icestorm-ice40-fpga-flow
 //
 // YOSYS
 // http://www.clifford.at/yosys/files/yosys_manual.pdf
@@ -40,6 +41,14 @@
 //   # to the end of the first command there to see warnings - A/B flags show lines before/after
 // Thus our current SIM command is:
 // $ yosys -p 'synth_ice40 -nobram -top top -blif test.blif' top.v
+//
+// If we are using additional files and not includes (which matches the apio default)
+// if the files are in the main directory then we need to capture all the files/modules doing for example:
+//
+// $ yosys -p 'synth_ice40 -top top -blif test.blif' one-shots.v top.v
+//
+// Or modify the main SIM macro ifdef case to add the include
+// Or we put the file in a folder and then always use include
 //
 // $ yosys -o test_syn.v test.blif
 // $ iverilog -o test_post -D POST_SYNTHESIS top_tb.v test_syn.v `yosys-config --datdir/ice40/cells_sim.v`

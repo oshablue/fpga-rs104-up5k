@@ -1,0 +1,13 @@
+read_verilog -D SIM top.v;
+#read_verilog -DSIM -lib +/ice40/cells_sim.v top.v;
+#prep -top top;
+hierarchy -check -top top;
+proc;
+opt;
+fsm;
+opt;
+#techmap;    
+#opt;
+#dfflibmap -liberty /usr/local/share/yosys/cells.lib;
+#abc -liberty /usr/local/share/yosys/cells.lib;
+show -stretch -prefix top -format dot;

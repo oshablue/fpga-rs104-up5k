@@ -5,3 +5,8 @@ hardware.asc
 hardware.bin
 hardware.blif
 hardware.out
+simtmp/
+sim.blif
+sim_synth.v
+sim_to_waves.s
+sim_dump.vcd

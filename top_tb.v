@@ -148,7 +148,7 @@ module top_tb;
 
     initial // initial block executes only once
         begin
-            $dumpfile("test_pre.vcd");
+            $dumpfile("sim_dump.vcd");
             $dumpvars;
             #100 RST = 0;
             #150 RST = 1;

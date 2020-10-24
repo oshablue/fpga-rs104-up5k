@@ -1,0 +1,67 @@
+[*]
+[*] GTKWave Analyzer v3.3.107 (w)1999-2020 BSI
+[*] Fri Oct 23 14:58:46 2020
+[*]
+[dumpfile] "/Users/nisch/code/fpga-rs104-up5k/test_pre.vcd"
+[dumpfile_mtime] "Fri Oct 23 14:52:38 2020"
+[dumpfile_size] 27870522
+[savefile] "/Users/nisch/code/fpga-rs104-up5k/10-Oct-23-sim01.gtkw"
+[timestart] 0
+[size] 1905 529
+[pos] -1 -1
+*-9.000000 640 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] top_tb.
+[treeopen] top_tb.UUT.
+[sst_width] 193
+[signals_width] 372
+[sst_expanded] 1
+[sst_vpaned_height] 144
+@28
+top_tb.UUT.RST
+top_tb.UUT.clk160
+top_tb.UUT.adc_encode
+top_tb.UUT.UART_TX
+top_tb.UUT.trig_in_rise
+@800200
+-top_tb.UUT.\mem[0][7:0]
+@1001200
+-group_end
+@800200
+-top_tb.UUT.\mem[1][7:0]
+@1001200
+-group_end
+@800022
+#{top_tb.UUT.\uart_txbyte[7:0]} top_tb.UUT.\uart_txbyte[7] top_tb.UUT.\uart_txbyte[6] top_tb.UUT.\uart_txbyte[5] top_tb.UUT.\uart_txbyte[4] top_tb.UUT.\uart_txbyte[3] top_tb.UUT.\uart_txbyte[2] top_tb.UUT.\uart_txbyte[1] top_tb.UUT.\uart_txbyte[0]
+@1001200
+-group_end
+@28
+top_tb.UUT.uart_send
+top_tb.UUT.new_capt
+top_tb.UUT.trigd
+top_tb.UUT.sclk
+top_tb.UUT.SAMPLECLK
+top_tb.UUT.read_mem_uart_rise
+@800022
+#{top_tb.UUT.\addr_rd[11:0]} top_tb.UUT.\addr_rd[11] top_tb.UUT.\addr_rd[10] top_tb.UUT.\addr_rd[9] top_tb.UUT.\addr_rd[8] top_tb.UUT.\addr_rd[7] top_tb.UUT.\addr_rd[6] top_tb.UUT.\addr_rd[5] top_tb.UUT.\addr_rd[4] top_tb.UUT.\addr_rd[3] top_tb.UUT.\addr_rd[2] top_tb.UUT.\addr_rd[1] top_tb.UUT.\addr_rd[0]
+@1001200
+-group_end
+@800022
+#{top_tb.UUT.\addr_wr_nxt[11:0]} top_tb.UUT.\addr_wr_nxt[11] top_tb.UUT.\addr_wr_nxt[10] top_tb.UUT.\addr_wr_nxt[9] top_tb.UUT.\addr_wr_nxt[8] top_tb.UUT.\addr_wr_nxt[7] top_tb.UUT.\addr_wr_nxt[6] top_tb.UUT.\addr_wr_nxt[5] top_tb.UUT.\addr_wr_nxt[4] top_tb.UUT.\addr_wr_nxt[3] top_tb.UUT.\addr_wr_nxt[2] top_tb.UUT.\addr_wr_nxt[1] top_tb.UUT.\addr_wr_nxt[0]
+@1001200
+-group_end
+@800023
+#{top_tb.UUT.\mem[0][7:0]} top_tb.UUT.\mem[0][7] top_tb.UUT.\mem[0][6] top_tb.UUT.\mem[0][5] top_tb.UUT.\mem[0][4] top_tb.UUT.\mem[0][3] top_tb.UUT.\mem[0][2] top_tb.UUT.\mem[0][1] top_tb.UUT.\mem[0][0]
+@1001201
+-group_end
+@800022
+#{top_tb.UUT.\mem[1][7:0]} top_tb.UUT.\mem[1][7] top_tb.UUT.\mem[1][6] top_tb.UUT.\mem[1][5] top_tb.UUT.\mem[1][4] top_tb.UUT.\mem[1][3] top_tb.UUT.\mem[1][2] top_tb.UUT.\mem[1][1] top_tb.UUT.\mem[1][0]
+@1001200
+-group_end
+@800022
+#{top_tb.UUT.\addr_wr[11:0]} top_tb.UUT.\addr_wr[11] top_tb.UUT.\addr_wr[10] top_tb.UUT.\addr_wr[9] top_tb.UUT.\addr_wr[8] top_tb.UUT.\addr_wr[7] top_tb.UUT.\addr_wr[6] top_tb.UUT.\addr_wr[5] top_tb.UUT.\addr_wr[4] top_tb.UUT.\addr_wr[3] top_tb.UUT.\addr_wr[2] top_tb.UUT.\addr_wr[1] top_tb.UUT.\addr_wr[0]
+@1001200
+-group_end
+@28
+top_tb.UUT.write_enable
+[pattern_trace] 1
+[pattern_trace] 0

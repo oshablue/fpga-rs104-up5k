@@ -1704,14 +1704,6 @@ module top (
     //
     //*************************************************************************
 
-    //`ifdef DATA_TEST_INCREMENT_VALUES
-      // TODO!!! Next line allows better functioning even though not used??????
-      //reg [11:0] test_val, test_val_next;
-      //reg [3:0] blah, blah_blah; // 2 reg's then unused ... creates more working ish - the closer to the first line the more working ish !!!
-      //reg [7:0] test_val_8bit;
-      //assign test_val_8bit = {test_val[7:0]};
-    //`endif // ifdef DATA_TEST_INCREMENT_VALUES
-
     `ifndef USE_UART
       always @( posedge SAMPLECLK )
       begin
@@ -1730,7 +1722,7 @@ module top (
     `endif // ifndef USE_UART
 
     `ifdef USE_UART
-      //always @( posedge sysclk ) // SAMPLECLK )
+
       wire write_addr_incr_clk;
       assign write_addr_incr_clk = ( trigd & adc_encode );
 
@@ -1742,17 +1734,11 @@ module top (
       begin
         if ( trig_in_rise ) begin
           addr_wr_nxt <= 12'b 0000_0000_0000;
-          //`ifdef DATA_TEST_INCREMENT_VALUES
-          //  test_val_next <= 12'b 0000_0000_0000;
-          //`endif // ifdef DATA_TEST_INCREMENT_VALUES
-        //end else if ( trigd & adc_encode  ) begin
-        end else begin //if ( write_addr_incr_clk ) begin // yes we need this event here to compile
+        end else begin
           addr_wr_nxt <= (addr_wr + 1); //1'b 1);
-          //`ifdef DATA_TEST_INCREMENT_VALUES
-          //  test_val_next <= (test_val + 1'b 1);
-          //`endif // ifdef DATA_TEST_INCREMENT_VALUES
         end
       end
+
     `endif // ifndef USE_UART
 
 
@@ -1777,8 +1763,12 @@ module top (
     //
     /***************************************************************************/
 
+
     `ifndef USE_UART
-      // This will give a half delay?
+
+      // WARNING this have been massively changed from before UART implementation!!!
+
+      // This will give a half delay - yes, SIM shows working
       wire delayed_capture_clk;
       // Delay until data good at the converter
       assign delayed_capture_clk = ( ( sclk && ~SAMPLECLK ) ); // && ~clk160 );
@@ -1787,44 +1777,37 @@ module top (
       begin
 
         if ( trigd ) begin
-          addr_wr <= addr_wr_nxt; // Is this right? was commented during UART dev ....
-          //`ifndef DATA_TEST_INCREMENT_VALUES
-            mem[addr_wr] <= data_in;
-          //`endif
-          //`ifdef DATA_TEST_INCREMENT_VALUES
-          //  mem[addr_wr] <= addr_wr[7:0];// test_val_8bit;
-          //`endif
+          addr_wr <= addr_wr_nxt;
+          mem[addr_wr] <= data_in;
         end
 
       end
     `endif // ifndef USE_UART
 
-    `ifdef USE_UART
-      // This will give a half delay?
-      //(* keep *) wire delayed_capture_clk; // yes this works for POST sim so far // interestingly it also effects the PDO output pin presence of this signal too!
-      // That is, it will be optimized out - AND we lose the signal on the output pin! WHY???
-      wire delayed_capture_clk; // yes this works for POST sim so far
-      // Delay until data good at the converter?
-      assign delayed_capture_clk = ( ~sclk & SAMPLECLK ); // && ~clk160 );
 
-      // We move this to a separate block and use block assignments
-      // hopefully to allow for RAM write timing
-      // It seems to have made the difference
+    `ifdef USE_UART
+
+      // This will give a half delay - yes confirmed-ish in SIM
+      //(* keep *) wire delayed_capture_clk; // yes this works for POST sim so far
+      // interestingly it also effects the PDO output pin presence of this signal too!
+
+      wire delayed_capture_clk; // yes this works for POST sim so far
+      // Delay until data good at the converter - yes-ish
+      assign delayed_capture_clk = ( ~sclk & SAMPLECLK );
+
       wire write_enable;
       assign write_enable = ( trigd & delayed_capture_clk );
 
-      //always @ ( posedge sysclk ) begin
+      // At the moment, it seems to like this capture delay timing
+      reg [7:0] data_in_tmp;
       always @ ( posedge write_enable ) begin
-        //if ( write_enable ) begin
+        data_in_tmp <= data_in;
+      end
+
+      always @ (negedge write_enable ) begin
         `ifndef TEST_NO_BRAM
-          //`ifndef DATA_TEST_INCREMENT_VALUES // TODO
-            mem[addr_wr] <= data_in;
-          //`endif
-          //`ifdef DATA_TEST_INCREMENT_VALUES
-          //  mem[addr_wr] <= (addr_wr[7:0] | 8'b 1000_0000);
-          //`endif
+          mem[addr_wr] <= data_in_tmp;
         `endif // ifndef TEST_NO_BRAM
-        //end // if write_enable
       end
 
 
@@ -1836,41 +1819,7 @@ module top (
         end
       end
 
-
-      /*always @( posedge sysclk ) //  delayed_capture_clk )
-      begin
-
-        if ( write_enable ) begin //trigd & delayed_capture_clk ) begin
-          addr_wr <= addr_wr_nxt;
-          // NOTE: Yosys doesn't like synthesis translate_on/off
-          // like ... I agree - using just MACROs then ...
-          //// NOsynthesisNOtranslateNOoff
-          /*`ifndef TEST_NO_BRAM
-            `ifndef DATA_TEST_INCREMENT_VALUES
-              mem[addr_wr] <= data_in;
-            `endif
-            `ifdef DATA_TEST_INCREMENT_VALUES
-              mem[addr_wr] <= (addr_wr[7:0] | 8'b 1000_0000);// test_val_8bit; // for checking if it's writing when read
-            `endif
-          `endif // ifndef TEST_NO_BRAM
-          //// NOsynthesisNOtranslateNOon
-          */
-        //end
-
-      //end*/
     `endif // ifndef USE_UART
-
-
-    // MOVED
-    // This was within the output contruction packet before
-    /*always @ (posedge SAMPLECLK) begin
-      if ( trigd ) begin
-        addr_wr <= addr_wr_nxt;
-        `ifdef DATA_TEST_INCREMENT_VALUES
-          test_val <= test_val_next;
-        `endif // ifdef DATA_TEST_INCREMENT_VALUES
-      end
-    end*/
 
 
 

@@ -151,7 +151,7 @@ set_io --warn-no-port data_in[7]      4     #IOB_8a          4     # Diff: TRUE 
 #set_io --warn-no-port VCC             5
 
 set_io --warn-no-port adc_encode      6     #IOB_13b         6     # Diff: COMP of IOB_12a
-set_io --warn-no-port CDONE           7
+#UART_UNUSEDset_io --warn-no-port CDONE           7
 
 #INFO:
 #set_io --warn-no-port CRESET_B        8     # CRESET_B is always only itself
@@ -167,7 +167,7 @@ set_io --warn-no-port RTZ_POS         11 #IOB_20a         11    # MCU_CTRL_RTZ_P
 #set_io --warn-no-port IOB_22a         12     # DEFAULT Diff: TRUE of IOB_23b
 #end
 #ifdef BUILD_FOR_RS104
-set_io --warn-no-port SS_MCU_FPGA_SPI   12    # RS104
+#UART_UNUSEDset_io --warn-no-port SS_MCU_FPGA_SPI   12    # RS104
 #end
 
 
@@ -184,13 +184,13 @@ set_io --warn-no-port SS_MCU_FPGA_SPI   12    # RS104
 #set_io --warn-no-port IOB_24a         13    # Diff: TRUE of IOB_25b
 #end
 #ifdef BUILD_FOR_RS104
-set_io --warn-no-port FPGA_PIN13        13    # RS104: FPGA_PIN13 => JT3B P9 (breakout GPIO header)
+#UART_UNUSED set_io --warn-no-port FPGA_PIN13        13    # RS104: FPGA_PIN13 => JT3B P9 (breakout GPIO header)
 #end
 
-set_io --warn-no-port IOB_32a_SPI_SDO 14      # "MISO_GREEN"
-set_io --warn-no-port IOB_34a_SPI_SCK 15      # "SCK_ORANGE"
-set_io --warn-no-port IOB_35b_SPI_SS  16      # "SS_GRAY"
-set_io --warn-no-port IOB_33b_SPI_SDI 17      # "MOSI_YELLOW"
+#UART_UNUSEDset_io --warn-no-port IOB_32a_SPI_SDO 14      # "MISO_GREEN"
+#UART_UNUSEDset_io --warn-no-port IOB_34a_SPI_SCK 15      # "SCK_ORANGE"
+#UART_UNUSEDset_io --warn-no-port IOB_35b_SPI_SS  16      # "SS_GRAY"
+#UART_UNUSEDset_io --warn-no-port IOB_33b_SPI_SDI 17      # "MOSI_YELLOW"
 
 #ifdef BUILD_FOR_RS104
   # OPTIONAL RS104 UART PINS
@@ -247,7 +247,7 @@ set_io --warn-no-port CLK             20    #IOB_25b_G3      20    # G3 / Diff: 
 #
 
 #ifdef BUILD_FOR_RS104
-set_io --warn-no-port fifo_txe          25    # RS104: 2232OUT_TX!E => SJ6 => JT3B P6 Optional GPIO
+#UART_UNUSEDset_io --warn-no-port fifo_txe          25    # RS104: 2232OUT_TX!E => SJ6 => JT3B P6 Optional GPIO
 #else
 #set_io --warn-no-port fifo_txe        25    #IOT_36b         25    # Diff: COMP of IOT_37a
 #end
@@ -266,7 +266,7 @@ set_io --warn-no-port fifo_txe          25    # RS104: 2232OUT_TX!E => SJ6 => JT
     #ifdef UART_CCC_PDO6_CCCRX
     set_io --warn-no-port UART_RX      27 #see note above #data_out[6]     27    # RS104: PDO6 => CCC-RX
     #end
-    set_io --warn-no-port data_out[5]   28    # RS104: PDO5 => JT3A P1
+    #UART_UNUSEDset_io --warn-no-port data_out[5]   28    # RS104: PDO5 => JT3A P1
   #end
 #end
 
@@ -277,7 +277,7 @@ set_io --warn-no-port fifo_txe          25    # RS104: 2232OUT_TX!E => SJ6 => JT
 #set_io --warn-no-port VCC             30
 
 #define BUILD_FOR_RS104
-set_io --warn-no-port data_out[4]     31    # RS104: PDO4 => JT3A P2
+#UART_UNUSEDset_io --warn-no-port data_out[4]     31    # RS104: PDO4 => JT3A P2
 set_io --warn-no-port PDO3            32    #data_out[3]     32    # RS104: PDO3 => JT3A P4
 #else
 #set_io --warn-no-port data_out[4]     31    #IOT_42b         31    # Diff: COMP of IOT_43a
@@ -327,9 +327,9 @@ set_io --warn-no-port RST             37    #IOT_45a_G1      37    # G1 / Diff: 
 #end # Just don't use it on breakout board - it conflicts with clock mapping right now using the lattice demo setup
 
 set_io --warn-no-port ext_trig_in     38    #IOT_50b         38    # Diff: COMP of IOT_51a
-set_io --warn-no-port RGB0            39    # Blue (?)
-set_io --warn-no-port RGB1            40    # Green (?)
-set_io --warn-no-port RGB2            41    # Red (?)
+#UART_UNUSEDset_io --warn-no-port RGB0            39    # Blue (?)
+#UART_UNUSEDset_io --warn-no-port RGB1            40    # Green (?)
+#UART_UNUSEDset_io --warn-no-port RGB2            41    # Red (?)
 
 # re-purpose the next input as an input for b0 of the rx-delay 2 bit setting
 #set_io --warn-no-port read_mem_in     42    #IOT_51a         42    # Diff: TRUE of IOT_50b

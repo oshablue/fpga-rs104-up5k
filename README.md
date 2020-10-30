@@ -28,7 +28,14 @@ identified in apio.ini
 
 
 
+## TODO
 
+### UART / RS104 Variant
+
+- Update/review again pulse ctrl chained signal timing for more variants
+- Create config regs clocked in from MCU for runtime variable timing and test modes for comms testing
+- FUTURE: What's up with the counter width implementations? Synth? Try and port to latest and greatest Synth/PNR toolchain
+- Optional modules - eg quad encoder pulse count and transmit; other runtime variables: length, freq, etc.
 
 
 

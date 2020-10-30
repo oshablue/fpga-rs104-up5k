@@ -812,7 +812,13 @@ module top (
       // So: 160MHz / 153k = 1046 => /2 = 523
       // We are back to 80MHz so:
       //parameter period_read_mem_uart = 32'd 523; //32'd 420;
+
+      // Much functional testing on this, works:
       parameter period_read_mem_uart = 32'd 262;
+
+      // Could try to trim down the send byte timing for a little more throughput
+      //parameter period_read_mem_uart = 32'd 252;
+
       //always @ (posedge sysclk) begin
       always @ ( posedge trigd_fall, posedge sysclk ) begin
           if ( trigd_fall ) begin
@@ -2147,6 +2153,14 @@ module top (
       // 387840 - 345920 = 41920 / 20 => 2096
       // 160 MHz / 2096 = 76.3kHz
       // So - that seems a little slow to get the new read address *** that's the issue
+
+      // From SIM test bench using now the 80MHz sysclk
+      // 46140 - 25100 from consecutive uart send pulse rising edges
+      // 21040
+      // /20 => @160MHz for PLL main TB clk => 1052
+      // 1052 160MHz clk cycles => 152091.2548 Hz
+      // 1/152091.2548 Hz = 6.575 usec window for each Byte to send out
+      // 4096 Bytes => 26.9312 ms
 
       // For testing - this just continually dumps data even if the value is the same
       //reg always_uart_send = 1'b1;

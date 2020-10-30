@@ -52,11 +52,9 @@ module monostable (
             count <= 0;
             pulse <= 1'b 0;
           end else if ( trigger ) begin
-            // if we have here ( trigger | pulse ) and we use
-            // count <= count + 1
-            // then this means that we start counting at the beginning of the trigger
-            // so make sure the pulse width is long enough
-            //count <= count + 1;
+            // Here since we have the trigger if statement first
+            // We only start counting after the trigger is done
+            // Thus real pulse width is trigger length + pulse width 
             count <= 1;
             pulse <= 1;
           end else if ( pulse ) begin

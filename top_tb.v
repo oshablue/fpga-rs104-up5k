@@ -66,6 +66,22 @@
 // first step of sim.
 // SO: DO this manually with the SYNTHESIS ifdef <=> ifndef in top.v manually for now when
 // doing post-syn sim
+//
+// Viewing flow graphs of the synthesis:
+// - Haven't yet gotten the whole thing or even more than one part to flow graph viz yet
+//   Perhaps a limitation, more likely just not full usage understood yet
+// - See scripts in script-drafts
+// - Can also just use those script examples on the yosys command line
+// - Mac OS X, did:
+//   - brew install graphviz (installs only the command line items)
+//   - brew install xdot (installs a GUI viewer for the dot file)
+// - *.dot to png for example, with suppressed output:
+//   - $ dot -Tpng top.dot -o top.png >/dev/null
+
+
+
+
+// See above comment - this doesn't really do anything right now
 `define TESTBENCH
 
 module top_tb;

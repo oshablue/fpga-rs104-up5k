@@ -64,212 +64,9 @@
 `include "top.vh"
 
 
-// For turning on the selfread so that after capture, data is dumped in parallel
-// out to some external fifo for example
-// Tested - so far yes still works as well with manually clocked out data from
-// nano program arduino with this macro turned off
-`define SELFREAD 1
+`include "submodules/dividers.v"
 
-// For use with nano arduino clocked read sample output and also read into
-// the external fifo (write into it really):
-//`define SYNC_SELFREAD_WITH_CLOCKED_OUT 1
 
-// For external fifo - note that documentation for the FT2232 chip shows different
-// implementations in different areas.  However, currently for the FT2232H
-// datasheet, the wr# is, as it is named with the "#", active low, thus idle high
-// Table 3.7 in DS_FT2232H
-// See Figure 4.6 in DS_FT2232H - this matches idle high, active low strobe
-// with the write-into-2232-fifo happening on the falling edge
-// As long as TXE# is not high
-`define EXT_FIFO_WR_ACTIVE  1'b 0
-`define EXT_FIFO_WR_IDLE    1'b 1
-
-
-// Here's the deal with PLL implementation
-// Ok - here are the refs:
-// Err... see the Readme
-// https://github.com/mystorm-org/BlackIce-II/wiki/PLLs-Advanced
-// https://github.com/YosysHQ/arachne-pnr/issues/64
-// You see my friend, apparently, when the PLLSOURCE pin (external)
-// is IOB bottom Bank 1 (for example we were/are using in our design G3/IOB_25b)
-// this compiles fine using SB_PLL40_CORE
-// HOWEVER
-// When CLK input goes to eg Pin 35 which is IOT_46B_G0 (Top, Bank 0)
-// the build breaks and arachne-pnr can't place the PLL so we need to use
-// PLL 2 which allows both an external pin to be used both to drive the PLL
-// and internally on the FPGA (as an output from the PLL block)
-// Defining the item below is like setting CLK (in from external oscillator)
-// to Pin 35 like for use with the Lattice Eval Board (UltraPlus Breakout Board)
-// Whereas undefining it is like using our planned implementation and setting the
-// CLK input pin to be eg Pin 20
-// Using Pin defs that don't match the imlementation and not using the correct
-// PLL (for example allowing the item below to be defined, but keeping CLK on
-// pin 20) will break the build.
-//
-// Uncomment to use breakout board with Pin 35 as the clock input (external)
-// Comment it to use our pin 20 implementation in the hardware HDL-0108-RSCPT
-// COMMENT OUT NEXT define LINE FOR HDL HARDWARE
-// UNCOMMENT NEXT define LINE FOR LATTICE SEMI DEMO BOARD
-//`define USE_LATTICE_BREAKOUT_DEMO
-// Thus below, not defined for HDL-0108-RSCPT config/hw
-`ifdef USE_LATTICE_BREAKOUT_DEMO
-  `define PLLSOURCE_BOTTOM_BANK
-`endif
-// CAUTION: Have not yet tested with the above commented out and then swapping
-// PCF file for the target build
-// THOUGH: Tested with not defined USE_LATTICE_BREAKOUT_DEMO and using
-// pins-up5k-sg48.pcf for pins as implemented on the HDL-0108-RSCPT R01 A1
-
-
-
-
-
-// Choose between using the read_mem_in implementation or otherwise
-// using the read_mem_in line instead as rx-delay-bit selection
-// Could also otherwise implement the rx-delay as a single line with external
-// control whose state simply defines the rx-delay after capture init
-// Use either both of the top two, or just the 3rd item
-// This implementation could obviously be cleaned up - just looking to retain
-// functionality during development.
-// These also relate to the SELFREAD - so please coordinate the defines.
-// They are more granular here for dev reasons.
-//`define USE_READ_MEM_IN_AS_READ_MEM_IN
-//`define USE_CAPT_DONE_AS_CAPT_DONE
-`define USE_RX_DELAY_CTRL_2BIT
-
-
-// TODO - noticed some potential noise at 0 Rx delay with updated
-// multi rx delay implemented - esp. at zero points
-// Tested various combos of reverting back to no rx delay and
-// moving capture (from data_in) timing to be based on posedge sclk for example
-// and all effect jitter or adc settling noise, it seems.
-// For now, implementation is ok - however possible improvement by
-// creating a delayed clock for the data_in grab that is sync'd to a delay
-// from the capture signal by some small amount
-// Thus perhaps running internally at 160MHz if possible (or similar)
-// And using the same SAMPLECLK (80MHz) for the main timing functions,
-// the divided by 2 clock (sclk) for the adc, and then uncomment the
-// block below, swapping it, for a slightly delayed grab from data_in such
-// that it is basically the only thing running at a slightly delayed clock edge,
-// yet still within the timing needed before next capture and data shifts, etc.
-
-// Confirmations that indeed we are running at 40MHz sample capture (encode)
-// clock and that the returned samples are correct in time, showing the
-// correct waveform in time, eg thickness as calculated from the return
-// in real life is correct
-
-
-// UART output for e.g. RS-485/422 style conversion output drive in our particular
-// system
-`define USE_UART // 1
-
-
-
-// Testing 0 - 9 ascii output at 1 second intervals:
-//`define UART_1SEC_OUTPUT_TEST
-
-// Include / use the module that encapsulates a 1-second interval 9600
-// digit transmit
-//`define USE_UART_TEST_MODULE
-
-
-
-// Testing clock output to a pin
-`define TEST_TIMING_TO_PIN_OUTPUT
-
-
-
-// Testing without using BRAMs generated
-//`define TEST_NO_BRAM
-
-
-
-
-// TESTING - Test increment data values into memory instead of capture data
-//`define DATA_TEST_INCREMENT_VALUES
-
-
-
-
-// Testing for non-brams timing, using small data bufs
-//`define TEST_SMALL_DATA
-
-
-
-
-
-// Idle state for the uart_send signal
-`define UART_SEND_IDLE    1'b 1
-
-
-
-
-
-
-
-// MACRO for toggling PLL on/off for respectively real world h/w vs simulation of POST for example
-//`define SIM
-
-
-`ifdef SIM
-  //`include "submodules/one-shots.v" // in the subdir, it is not automatically included, so we can an include statement universally
-  `define TEST_SMALL_DATA
-  `define USE_SIM_CLK_NOT_PLL
-`endif // ifdef SIM
-
-
-
-
-
-
-// For parallel data output
-// Default: Not used for UART / RS-485
-//`define USE_DATA_PORT
-
-
-
-// For TESTING on the LAttice Demo Board
-// Using leds
-//`define FLASH_LEDS 1
-
-
-
-
-
-// For TESTING with Multiple Pulse Patterns
-//`define DEMO_VAR_FREQ_PULSE
-
-
-
-
-
-`ifndef USE_UART
-  // TODO - Implemented TXE# (fifo_txe)
-`endif
-
-
-
-
-
-// For divide by N
-`define CLOG2(x) \
-   x <= 2	 ? 1 : \
-   x <= 4	 ? 2 : \
-   x <= 8	 ? 3 : \
-   x <= 16	 ? 4 : \
-   x <= 32	 ? 5 : \
-   x <= 64	 ? 6 : \
-   x <= 128	 ? 7 : \
-   x <= 256	 ? 8 : \
-   x <= 512	 ? 9 : \
-   x <= 1024	 ? 10 : \
-   x <= 2048	 ? 11 : \
-   x <= 4096	 ? 12 : \
-   x <= 8192	 ? 13 : \
-   x <= 16384	 ? 14 : \
-   x <= 32768	 ? 15 : \
-   x <= 65536	 ? 16 : \
-   -1
 
 
 
@@ -440,14 +237,34 @@ module top (
 
     `ifndef USE_UART
       divide_by_n #(.N(2)) div160to80(clk160, 1'b0, SAMPLECLK);
+      divide_by_n #(.N(4)) divsclk(clk160, 1'b0, sclk);
+      assign adc_encode = sclk;
     `else
       wire sysclk;
-      divide_by_n #(.N(2)) div160to80(clk160, 1'b0, sysclk);
-      assign SAMPLECLK = sysclk;
+      // Based on 160MHz PLL
+      `ifdef CLK_2MBPS_UART_40MHZ_SAMPLE_RATE
+        parameter SYSCLK_DIV = 2;
+        parameter SAMPLECLK_DIV = 4;
+      `endif
+      `ifdef CLK_1MBPS_UART_20MHZ_SAMPLE_RATE // Only intermittently worked ... TODO
+        parameter SYSCLK_DIV = 4;
+        parameter SAMPLECLK_DIV = 8;
+      `endif
+      divide_by_n #(.N(SYSCLK_DIV)) div160to80(clk160, 1'b0, sysclk); // Usually 2 => 80MHz from 160MHz
+      // In SIM, below create a 40 MHz clock but with 160MHz digital high
+      // pulse width - which might create problems for the ADC? (not symmetric)
+      // With current code implementation - so the sum total of code keeps the
+      // origina pulse width and just lengthens the digital low width
+      // 80MHz sysclk is however symmetric pulse width
+      // In UART implementation, there is no other use of divide_by_n
+      divide_by_n #(.N(SAMPLECLK_DIV)) divsclk(clk160, 1'b0, sclk); // Usually 4 => 40MHz from 160MHz
+
+      //divide_by_n #(.N(2)) div160to80(clk160, 1'b0, sysclk);
+      //divide_by_n #(.N(4)) divsclk(clk160, 1'b0, sclk);
+      assign adc_encode = sclk;
     `endif
 
-    divide_by_n #(.N(4)) divsclk(clk160, 1'b0, sclk);
-    assign adc_encode = (sclk);
+
 
 
 
@@ -796,7 +613,7 @@ module top (
 
       `ifdef USE_UART
         monostable #(
-          .PULSE_WIDTH(NSAMPLES*4),
+          .PULSE_WIDTH(NSAMPLES*2), // was 4 when using 160MHz clock // the wrong multiplier will shift the signal/front-face!
           .COUNTER_WIDTH(16)
         ) msv_capt(
           .clk          (sysclk),
@@ -1104,14 +921,20 @@ module top (
     assign RTZ_NEG = pulse_rtz;
     assign RTZ_POS = pulse_rtz;
 
+    wire delay_to_rtz_rise, delay_to_rtz_fall;
+    wire pulse_ctrl_clk;
+
+    `ifndef USE_UART
+      assign pulse_ctrl_clk = SAMPLECLK;
+    `else
+      assign pulse_ctrl_clk = sysclk;
+    `endif
+
 
 
     `ifndef DEMO_VAR_FREQ_PULSE
-      //assign pulse_on = pulse_on1;
-      //assign pulse_rtz = pulse_rtz1;
 
-
-      // TODO we can definitely parameterize the VAR_FREQ / swept frequency
+      // We can definitely parameterize the VAR_FREQ / swept frequency - see DEMO_VAR_FREQ_PULSE defined case
 
       //
       //
@@ -1128,9 +951,9 @@ module top (
         .COUNTER_WIDTH(5)           // 5 wires for up to count of 32
                                     // Measured (ctrl sig?) pulse width on scope is about 152 ns
       ) msv_pulse_on (
-        .clk        (SAMPLECLK),
-        .reset      (trig_in_rise),
-        .trigger    (trig_in_rise),
+        .clk        (pulse_ctrl_clk),
+        .reset      (trig_in_rise), // was trig_in_rise
+        .trigger    (trig_in_fall), // was trig_in_rise
         .pulse      (pulse_on)
       );
 
@@ -1149,10 +972,18 @@ module top (
         `endif
         .COUNTER_WIDTH(5)           // 5 wires for up to count of 32
       ) msv_delay_to_rtz (
-        .clk        (SAMPLECLK),
+        .clk        (pulse_ctrl_clk),
         .reset      (trig_in_rise),
-        .trigger    (!pulse_on),    // does this work?
+        //.trigger    (!pulse_on & trigd),    // should change this or add pre-pulse signal if we don't want pre-pulse RTZ on
+        .trigger    (trigd_rise),
         .pulse      (delay_to_rtz)
+      );
+
+      edge_detect edet_delay_to_rtz (
+        .async_sig  (delay_to_rtz),
+        .clk        (pulse_ctrl_clk),
+        .rise       (delay_to_rtz_rise),
+        .fall       (delay_to_rtz_fall)
       );
 
       // Indeed on scope, return to zero starts exactly with the application of this pulse
@@ -1165,9 +996,10 @@ module top (
         `endif
           .COUNTER_WIDTH(7)         // Max of 128 - if using the 1usec delay before SSR blanking - we have plenty of time
       ) msv_pulse_rtz (
-          .clk      (SAMPLECLK),
+          .clk      (pulse_ctrl_clk),
+          //.reset    (trig_in_rise | trigd),
           .reset    (trig_in_rise),
-          .trigger  (!delay_to_rtz),  // does this work? do we need a combined signal to avoid the early trig?
+          .trigger  (delay_to_rtz_fall),  // same as above msv should change if we don't want pre-pulse activation
           .pulse    (pulse_rtz)
       );
 
@@ -1735,7 +1567,7 @@ module top (
         if ( trig_in_rise ) begin
           addr_wr_nxt <= 12'b 0000_0000_0000;
         end else begin
-          addr_wr_nxt <= (addr_wr + 1); //1'b 1);
+          addr_wr_nxt <= addr_wr_nxt + 1; //(addr_wr + 1); //1'b 1);
         end
       end
 
@@ -1793,25 +1625,35 @@ module top (
 
       wire delayed_capture_clk; // yes this works for POST sim so far
       // Delay until data good at the converter - yes-ish
-      assign delayed_capture_clk = ( ~sclk & SAMPLECLK );
+      assign delayed_capture_clk = ( ~sclk & sysclk );
 
       wire write_enable;
-      assign write_enable = ( trigd & delayed_capture_clk );
+
+      // This create a pulse that is a full 160MHz long (pulse width is logic high length of 80MHz signal)
+      //assign write_enable = ( trigd & delayed_capture_clk );
+
+      // This creates a pulse width equal to one half cycle of 40MHz
+      assign write_enable = ( trigd & !adc_encode);
 
       // At the moment, it seems to like this capture delay timing
       reg [7:0] data_in_tmp;
       always @ ( posedge write_enable ) begin
         data_in_tmp <= data_in;
+        //data_in_tmp <= data_in_tmp + 1; // Testing sequence count output
       end
 
-      always @ (negedge write_enable ) begin
+      // This is too fast, essentially one full 160MHz or an 80MHz pulse half-cycle width
+      // (ie 6.25ns) cycle after the input capture - we get data glitches
+      //always @ (negedge write_enable ) begin // was negedge
+      always @ ( posedge write_addr_incr_clk ) begin
         `ifndef TEST_NO_BRAM
           mem[addr_wr] <= data_in_tmp;
         `endif // ifndef TEST_NO_BRAM
       end
 
 
-      always @ ( posedge trig_in_rise, posedge write_addr_incr_clk) begin
+      // was pose pose
+      always @ ( posedge trig_in_rise, negedge write_addr_incr_clk) begin
         if ( trig_in_rise ) begin
           addr_wr <= 0;
         end else begin
@@ -2129,8 +1971,9 @@ module top (
       // at about 3.57 MHz -- and then even higher than using a divisor of 16
       // or sometimes
       reg clk_baud_fastest = 0;
-      reg [31:0] cntr_fastest = 32'b0;
+      //reg [31:0] cntr_fastest = 32'b0;
       //parameter period_fastest = 40;  // for 160MHz clk in  but that's too fast for the larger counters
+      reg [7:0] cntr_fastest = 8'b 0;
       parameter period_fastest = 20;  // 2Mbps ish
       // 44: 1,818,181.8...
       // 43: Toggle at 160MHz / 43 => divide once more by two for the rate since
@@ -2143,12 +1986,12 @@ module top (
 
       always @ ( posedge sysclk ) begin
         if ( trigd_fall ) begin
-          cntr_fastest <= 32'b0;
+          cntr_fastest <= 8'b0;
         end else begin
           cntr_fastest <= cntr_fastest + 1;         // these were cntr_10M
           if ( cntr_fastest == period_fastest ) begin  // was cntr_10M == period_10M
               clk_baud_fastest <= ~clk_baud_fastest;  // clk_baud_10M
-              cntr_fastest <= 32'b0;              // was cntr_10M
+              cntr_fastest <= 8'b0;              // was cntr_10M
           end
         end
 
@@ -2230,7 +2073,13 @@ module top (
         //buf(uart_msv_send_trigger, read_mem_uart_fall); // was rise
         monostable #(
           .PULSE_WIDTH(period_tx_send_pulse),
-          .COUNTER_WIDTH(32)
+          .COUNTER_WIDTH(6) // Functional use 32! Even though only 8 bits are needed, in synth uart send break with 8 bits (!)
+          // interesting ... values that work:
+          // 32, 12, 10, 7, 6
+          // 9 => abc error
+          // 8 => no response to mcu paq command
+          // Yes PW matches expected 3*pd = 60 on SIM WF
+          // 60 = 3C = 6 bits minimum required
         ) msv_uart_send_pulse (
           .clk          (sysclk),
           .reset        (trig_in_rise),
@@ -2337,7 +2186,7 @@ module top (
         */
 
         `ifdef TEST_TIMING_TO_PIN_OUTPUT
-          buf(PDO0, trig_in_rise);
+          buf(PDO0, adc_encode);
           buf(PDO1, trigd);
           buf(PDO2, write_enable); //trig_in_rise);
           buf(PDO3, uart_send);
@@ -3103,40 +2952,6 @@ module monostable_vpw14b (
 
 endmodule
 
-
-
-module divide_by_n(
-	 input clk,
-	  input reset,
-	   output reg out
-  );
-
-	parameter N = 2;
-
-  // Please NOTE:
-  //https://github.com/YosysHQ/yosys/issues/103
-  // The initialization doesn't really mean anything
-  // All regs on iCE40 init to zero ostensibly
-  // However, for simulation purposes, we need to define an init value
-
-	reg [`CLOG2(N)-1:0] counter = 0;
-
-	always @(posedge clk)
-	begin
-		out <= 0;
-
-		if (reset)
-			counter <= 0;
-		else
-		if (counter == 0)
-		begin
-			out <= 1;
-			counter <= N - 1;
-		end else
-			counter <= counter - 1;
-	end
-
-endmodule
 
 
 

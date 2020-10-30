@@ -957,8 +957,9 @@ module top (
       // Slope limit of the voltage with time likely due to damping in system and ohmage
       // versus with 12/12 pulse width and rtz delay time, voltage to -100VDC or so in neg pulse
       // and
+      parameter PULSE_ON_WIDTH = 12;
       monostable #(
-        .PULSE_WIDTH(12),           // 80MHz / 7MHz (for 2x3.5MHz for half-cycle on hold)
+        .PULSE_WIDTH(PULSE_ON_WIDTH),           // 80MHz / 7MHz (for 2x3.5MHz for half-cycle on hold)
         .COUNTER_WIDTH(5)           // 5 wires for up to count of 32
                                     // Measured (ctrl sig?) pulse width on scope is about 152 ns
       ) msv_pulse_on (
@@ -977,6 +978,7 @@ module top (
       // Width of 5: Yes slight more negative voltage peak further
       // Width of 8: Yes more neg even TxDAC:0x0f on 3.5MHz Comp:
       // Width of 12: Yes, even more so, on target
+      parameter DELAY_TO_RTZ_WIDTH = 4;
       monostable #(
         `ifndef DEMO_VAR_FREQ_PULSE
           // was 12 typically
@@ -990,7 +992,7 @@ module top (
           // However: 4 seems slightly better for non-inductor tuned, just crystal tuned transducers (sharp echo spikes)
           //   Including both composite test transducers here
           // Not yet sure about continuous pulsing (eg current consumption over long term)
-          .PULSE_WIDTH(4),         // 80MHz / 7MHz (for 2x3.5MHz for half-cycle on hold)
+          .PULSE_WIDTH( PULSE_ON_WIDTH + DELAY_TO_RTZ_WIDTH ),         // 80MHz / 7MHz (for 2x3.5MHz for half-cycle on hold)
         `endif
         `ifdef DEMO_VAR_FREQ_PULSE
           .PULSE_WIDTH(11),
@@ -999,8 +1001,7 @@ module top (
       ) msv_delay_to_rtz (
         .clk        (pulse_ctrl_clk),
         .reset      (trig_in_rise),
-        //.trigger    (!pulse_on & trigd),    // should change this or add pre-pulse signal if we don't want pre-pulse RTZ on
-        .trigger    (trigd_rise),
+        .trigger    (trig_in_fall),
         .pulse      (delay_to_rtz)
       );
 
@@ -1038,7 +1039,6 @@ module top (
           .COUNTER_WIDTH(7)         // 7 = Max of 128 - if using the 1usec delay before SSR blanking - we have plenty of time
       ) msv_pulse_rtz (
           .clk      (pulse_ctrl_clk),
-          //.reset    (trig_in_rise | trigd),
           .reset    (trig_in_rise),
           .trigger  (delay_to_rtz_fall),  // same as above msv should change if we don't want pre-pulse activation
           .pulse    (pulse_rtz)

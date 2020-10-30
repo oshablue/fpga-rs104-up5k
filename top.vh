@@ -1,5 +1,5 @@
 // MACRO for toggling PLL on/off for respectively real world h/w vs simulation of POST for example
-//`define SIM
+`define SIM
 
 
 `ifdef SIM

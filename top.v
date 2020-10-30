@@ -514,11 +514,15 @@ module top (
           // we are now back to 80MHz
           //parameter RX_DELAY_BASE = 4800; // 80e6 (clk rate) X 30e-6 = 2400 where 30e-6 is increments of 30 microseconds
           parameter RX_DELAY_BASE = 2400;
-          always @( posedge sysclk )
-          begin
-            if ( trig_in_rise ) begin
+          // Yes, the updates below fixed the unknown in the rx_delay signal (so far)
+          // that was causing issues with damped pulse signal due to RTZ firing at the same
+          // time as the pulse - traced back to essentially the rx_delay edge signal usage
+          // triggering the delay to rtz / rtz early (same time as pulse!) - scoped output signals
+          //always @( posedge sysclk ) begin
+          always @ ( posedge trig_in_rise ) begin
+            //if ( trig_in_rise ) begin
               rx_delay_clocks <= ( RX_DELAY_BASE * rx_delay_ctrl ) + 4; // See note below
-            end
+            //end
           end
 
           // 2 clock offset allows us to use the same !rx_delay signal to capture
@@ -809,12 +813,17 @@ module top (
       // We are back to 80MHz so:
       //parameter period_read_mem_uart = 32'd 523; //32'd 420;
       parameter period_read_mem_uart = 32'd 262;
-      always @ (posedge sysclk) begin
-          cntr_read_mem_uart <= cntr_read_mem_uart + 1;
-          if (cntr_read_mem_uart == period_read_mem_uart) begin
-              // Another divide Hz by 2
-              clk_read_mem_uart <= ~clk_read_mem_uart;
-              cntr_read_mem_uart <= 32'b0;
+      //always @ (posedge sysclk) begin
+      always @ ( posedge trigd_fall, posedge sysclk ) begin
+          if ( trigd_fall ) begin
+            cntr_read_mem_uart <= 32'b0;
+          end else begin
+            cntr_read_mem_uart <= cntr_read_mem_uart + 1;
+            if (cntr_read_mem_uart == period_read_mem_uart) begin
+                // Another divide Hz by 2
+                clk_read_mem_uart <= ~clk_read_mem_uart;
+                cntr_read_mem_uart <= 32'b0;
+            end
           end
       end
       // Now we need to gate this such that read mem uart signal is only active
@@ -937,10 +946,12 @@ module top (
       // We can definitely parameterize the VAR_FREQ / swept frequency - see DEMO_VAR_FREQ_PULSE defined case
 
       //
-      //
-      //
       // First pulse
 
+
+      //**********************
+      //  PULSE
+      //
       // Yes scope-verified that with of 12 gives a pulse width that measures as 7MHz
       // 24 width => -140VDC on 3.5MHz Comp under test
       // Slope limit of the voltage with time likely due to damping in system and ohmage
@@ -958,6 +969,9 @@ module top (
       );
 
 
+      //**********************
+      // Delay to RTZ
+      //
       // Width of 1: Max neg voltage is less for the 3.5MHz XD under test
       // Width of 3: Slightly more negative voltage
       // Width of 5: Yes slight more negative voltage peak further
@@ -965,7 +979,18 @@ module top (
       // Width of 12: Yes, even more so, on target
       monostable #(
         `ifndef DEMO_VAR_FREQ_PULSE
-          .PULSE_WIDTH(12),         // 80MHz / 7MHz (for 2x3.5MHz for half-cycle on hold)
+          // was 12 typically
+          // Yes, pulses get narrower with decreasing PW
+          // Scope shows slightly lesser voltage but much sharper neg peak (so does WF returned)
+          // At PW = 5 - single spike vs multiple spikes -
+          // At PW = 4 - seems even sharper S/N
+          // Indeed lots of impact on receive WF characs with tuned pulse ctrl timing
+          // Various values here cause timing issues and things fall apart
+          // However: 12 seems slightly better for inductor-shorted-tuned transducer in terms of echo definition
+          // However: 4 seems slightly better for non-inductor tuned, just crystal tuned transducers (sharp echo spikes)
+          //   Including both composite test transducers here
+          // Not yet sure about continuous pulsing (eg current consumption over long term)
+          .PULSE_WIDTH(4),         // 80MHz / 7MHz (for 2x3.5MHz for half-cycle on hold)
         `endif
         `ifdef DEMO_VAR_FREQ_PULSE
           .PULSE_WIDTH(11),
@@ -986,15 +1011,31 @@ module top (
         .fall       (delay_to_rtz_fall)
       );
 
+
+      //**********************
+      // RTZ
+      //
       // Indeed on scope, return to zero starts exactly with the application of this pulse
       monostable #(
         `ifndef DEMO_VAR_FREQ_PULSE
+          // was 64
+          // using up to 240 makes not much difference - except in combination
+          // with changing counter width eg to 10 we get timing errors that need to get
+          // sorted out - including loss of RTZ altogether
+          // Interestingly, NOTE: if RTZ fails or no RTZ or very minimal (like1? maybe zero)
+          // the amp saturates and the high frequency ringing early in the return signal after the pulse
+          // goes away - so things "look" cleaner on the return before the first front face
+          // longer RTZs don't really help all that much -- there are just trade-offs
+          // Probably better to simply tune the pulse duration and the delay to RTZ
+          // Could sneak away with no RTZ in some situations probably
           .PULSE_WIDTH(64),         // Long (about 4x = 2 cycles) for the RTZ
         `endif
         `ifdef DEMO_VAR_FREQ_PULSE
           .PULSE_WIDTH(10),
         `endif
-          .COUNTER_WIDTH(7)         // Max of 128 - if using the 1usec delay before SSR blanking - we have plenty of time
+          // was 7 - 10 created some errors sometimes depending on the pulse width
+          // More TODO regarding counter synth and implementation in real h/w
+          .COUNTER_WIDTH(7)         // 7 = Max of 128 - if using the 1usec delay before SSR blanking - we have plenty of time
       ) msv_pulse_rtz (
           .clk      (pulse_ctrl_clk),
           //.reset    (trig_in_rise | trigd),
@@ -1984,7 +2025,9 @@ module top (
       // 40: 2MBps
       // Remember baud rate must work for 10-bits and the read_mem_uart_rise ferquency (interval between bytes transmitted basically)
 
-      always @ ( posedge sysclk ) begin
+      //always @ ( posedge sysclk ) begin
+      always @ ( posedge trigd_fall, posedge sysclk ) begin
+
         if ( trigd_fall ) begin
           cntr_fastest <= 8'b0;
         end else begin
@@ -2042,7 +2085,8 @@ module top (
       // triggered from the read_mem_uart_rise/fall and the baud clock
       // so we should stretch this out in time a touch
       // even with 2x we can just slightly miss the rising edge of the send pulse
-      parameter period_tx_send_pulse = 3*period_fastest; //4 * period_fastest;
+      parameter period_tx_send_pulse_mult = 4; // was 3
+      parameter period_tx_send_pulse = period_tx_send_pulse_mult*period_fastest;
 
 
       `ifdef UART_1SEC_OUTPUT_TEST
@@ -2073,13 +2117,14 @@ module top (
         //buf(uart_msv_send_trigger, read_mem_uart_fall); // was rise
         monostable #(
           .PULSE_WIDTH(period_tx_send_pulse),
-          .COUNTER_WIDTH(6) // Functional use 32! Even though only 8 bits are needed, in synth uart send break with 8 bits (!)
+          .COUNTER_WIDTH(7) // Functional use 32! Even though only 8 bits are needed, in synth uart send break with 8 bits (!)
           // interesting ... values that work:
           // 32, 12, 10, 7, 6
           // 9 => abc error
           // 8 => no response to mcu paq command
           // Yes PW matches expected 3*pd = 60 on SIM WF
           // 60 = 3C = 6 bits minimum required
+          // 120 = 7 bits minimum required
         ) msv_uart_send_pulse (
           .clk          (sysclk),
           .reset        (trig_in_rise),

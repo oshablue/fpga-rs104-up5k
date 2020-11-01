@@ -124,7 +124,9 @@ module top_tb;
 
     // clock generation
     // vs always #10 CLK=~CLK; // see link above
+    // was:
     always #10 CLK = (CLK === 1'b0);
+    //always #1 CLK = (CLK === 1'b0);
 
     // duration for each bit = 20 * timescale = 20 * 1 ns  = 20ns
     //localparam period = 20;
@@ -162,14 +164,41 @@ module top_tb;
       .PDO2 (PDO2)            // goes to JT3A Pin 6 (PDO2)
     );
 
+    // OKishTODO update pulse widths and timing to match as measured on scope
+    // for actual MCU control!
+
+    // TODO RESET signal for seq_id reset (actually the !RST) signal
+    // during a channel scan actually happens probably during the capture
+    // thus in earlier implementations the seq_id would get reset prematuraly
+    // after the capture trigger but maybe before the output started - thus sending
+    // one WF early the zeroed seq_id
+
+    // NOTE: Times below are ADDITIVE! (not absolute time positions on the timeline)
+
     initial // initial block executes only once
         begin
             $dumpfile("sim_dump.vcd");
             $dumpvars;
+            //#100 RST = 0;
+            //#150 RST = 1;
+            // With 160MHz real PLL and #1 CLK toggles
+            // 160MHz is 2 CLKs statements from above
+            // Duration of single reset toggle (2 consec C high level MCU instructions)
+            // 160MHz = 6.25ns period = 2 CLKs
+            // 108 ish ns for reset toggle from MCU => 17.3 periods = #35
+            // Or #350 if using #10 CLK toggles
             #100 RST = 0;
-            #150 RST = 1;
-            #200 ext_trig_in = 1;
-            #250 ext_trig_in = 0;
+            #350 RST = 1;
+            //#200 ext_trig_in = 1;
+            //#250 ext_trig_in = 0;
+            // Trig is same as above - 2 consec MCU high level stmts:
+            #100000 ext_trig_in = 1; // typical test was 1000 ...testing longer intervals
+            #350 ext_trig_in = 0;
+            // Now we test with a 2nd reset - really it would be the only one
+            // in a true channel scan series - we put it sometime within the capture
+            // period eg 103220 - 100800 = 2420
+            #2420 RST = 0;
+            #350  RST = 1;
             // Testing about the first PAQ pulse not working
             /*#10000 RST = 0;
             #10050 RST = 1;

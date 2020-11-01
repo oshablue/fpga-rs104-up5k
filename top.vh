@@ -180,6 +180,13 @@
 
 
 
+
+//`define SEQ_ID_IS_BASE_1
+`define SEQ_ID_IS_BASE_0
+
+
+
+
 `ifndef USE_UART
   // TODO - Implemented TXE# (fifo_txe)
 

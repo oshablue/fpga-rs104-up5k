@@ -1,0 +1,88 @@
+[*]
+[*] GTKWave Analyzer v3.3.107 (w)1999-2020 BSI
+[*] Sun Nov  1 16:16:08 2020
+[*]
+[dumpfile] "/Users/nisch/code/fpga-rs104-up5k/sim_dump.vcd"
+[dumpfile_mtime] "Sun Nov  1 16:01:10 2020"
+[dumpfile_size] 16604279
+[savefile] "/Users/nisch/code/fpga-rs104-up5k/gtkwave-snapshots/11-Nov-01-interim-ref03A.gtkw"
+[timestart] 0
+[size] 1472 914
+[pos] -1 -1
+*-17.000000 100800 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] top_tb.
+[treeopen] top_tb.UUT.
+[sst_width] 193
+[signals_width] 372
+[sst_expanded] 1
+[sst_vpaned_height] 282
+@28
+top_tb.UUT.RST
+top_tb.UUT.reset
+top_tb.UUT.reset_wire
+top_tb.UUT.pending_seq_id_reset
+top_tb.UUT.clk160
+top_tb.UUT.sysclk
+top_tb.UUT.ext_trig_in
+top_tb.UUT.trig_in
+top_tb.UUT.adc_encode
+top_tb.UUT.trig_in_rise
+top_tb.UUT.trig_in_fall
+top_tb.UUT.PULSE_NEG
+top_tb.UUT.delay_to_rtz
+top_tb.UUT.delay_to_rtz_fall
+top_tb.UUT.RTZ_NEG
+top_tb.UUT.RTZ_POS
+top_tb.UUT.new_capt
+@29
+top_tb.UUT.new_capt_fall
+@28
+top_tb.UUT.trigd
+top_tb.UUT.trigd_fall
+top_tb.UUT.sclk
+top_tb.UUT.rx_delay
+top_tb.UUT.rx_delay_fall
+top_tb.UUT.write_enable
+top_tb.UUT.write_addr_incr_clk
+top_tb.UUT.UART_TX
+@800022
+#{top_tb.UUT.\uart_txbyte[7:0]} top_tb.UUT.\uart_txbyte[7] top_tb.UUT.\uart_txbyte[6] top_tb.UUT.\uart_txbyte[5] top_tb.UUT.\uart_txbyte[4] top_tb.UUT.\uart_txbyte[3] top_tb.UUT.\uart_txbyte[2] top_tb.UUT.\uart_txbyte[1] top_tb.UUT.\uart_txbyte[0]
+@1001200
+-group_end
+@28
+top_tb.UUT.uart_send
+top_tb.UUT.clk_baud
+top_tb.UUT.read_mem_uart
+@800022
+#{top_tb.UUT.\addr_rd_nxt[11:0]} top_tb.UUT.\addr_rd_nxt[11] top_tb.UUT.\addr_rd_nxt[10] top_tb.UUT.\addr_rd_nxt[9] top_tb.UUT.\addr_rd_nxt[8] top_tb.UUT.\addr_rd_nxt[7] top_tb.UUT.\addr_rd_nxt[6] top_tb.UUT.\addr_rd_nxt[5] top_tb.UUT.\addr_rd_nxt[4] top_tb.UUT.\addr_rd_nxt[3] top_tb.UUT.\addr_rd_nxt[2] top_tb.UUT.\addr_rd_nxt[1] top_tb.UUT.\addr_rd_nxt[0]
+@1001200
+-group_end
+@800022
+#{top_tb.UUT.\addr_rd[11:0]} top_tb.UUT.\addr_rd[11] top_tb.UUT.\addr_rd[10] top_tb.UUT.\addr_rd[9] top_tb.UUT.\addr_rd[8] top_tb.UUT.\addr_rd[7] top_tb.UUT.\addr_rd[6] top_tb.UUT.\addr_rd[5] top_tb.UUT.\addr_rd[4] top_tb.UUT.\addr_rd[3] top_tb.UUT.\addr_rd[2] top_tb.UUT.\addr_rd[1] top_tb.UUT.\addr_rd[0]
+@1001200
+-group_end
+@28
+top_tb.UUT.read_mem_uart_rise
+top_tb.UUT.read_mem_uart_fall
+@800022
+#{top_tb.UUT.\seq_id[7:0]} top_tb.UUT.\seq_id[7] top_tb.UUT.\seq_id[6] top_tb.UUT.\seq_id[5] top_tb.UUT.\seq_id[4] top_tb.UUT.\seq_id[3] top_tb.UUT.\seq_id[2] top_tb.UUT.\seq_id[1] top_tb.UUT.\seq_id[0]
+@1001200
+-group_end
+@800022
+#{top_tb.UUT.\mem[0][7:0]} top_tb.UUT.\mem[0][7] top_tb.UUT.\mem[0][6] top_tb.UUT.\mem[0][5] top_tb.UUT.\mem[0][4] top_tb.UUT.\mem[0][3] top_tb.UUT.\mem[0][2] top_tb.UUT.\mem[0][1] top_tb.UUT.\mem[0][0]
+@1001200
+-group_end
+@800022
+#{top_tb.UUT.\mem[12][7:0]} top_tb.UUT.\mem[12][7] top_tb.UUT.\mem[12][6] top_tb.UUT.\mem[12][5] top_tb.UUT.\mem[12][4] top_tb.UUT.\mem[12][3] top_tb.UUT.\mem[12][2] top_tb.UUT.\mem[12][1] top_tb.UUT.\mem[12][0]
+@1001200
+-group_end
+@800022
+#{top_tb.UUT.\addr_wr[11:0]} top_tb.UUT.\addr_wr[11] top_tb.UUT.\addr_wr[10] top_tb.UUT.\addr_wr[9] top_tb.UUT.\addr_wr[8] top_tb.UUT.\addr_wr[7] top_tb.UUT.\addr_wr[6] top_tb.UUT.\addr_wr[5] top_tb.UUT.\addr_wr[4] top_tb.UUT.\addr_wr[3] top_tb.UUT.\addr_wr[2] top_tb.UUT.\addr_wr[1] top_tb.UUT.\addr_wr[0]
+@1001200
+-group_end
+@800022
+#{top_tb.UUT.\addr_wr_nxt[11:0]} top_tb.UUT.\addr_wr_nxt[11] top_tb.UUT.\addr_wr_nxt[10] top_tb.UUT.\addr_wr_nxt[9] top_tb.UUT.\addr_wr_nxt[8] top_tb.UUT.\addr_wr_nxt[7] top_tb.UUT.\addr_wr_nxt[6] top_tb.UUT.\addr_wr_nxt[5] top_tb.UUT.\addr_wr_nxt[4] top_tb.UUT.\addr_wr_nxt[3] top_tb.UUT.\addr_wr_nxt[2] top_tb.UUT.\addr_wr_nxt[1] top_tb.UUT.\addr_wr_nxt[0]
+@1001200
+-group_end
+[pattern_trace] 1
+[pattern_trace] 0

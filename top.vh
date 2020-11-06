@@ -116,14 +116,26 @@
 // Testing 0 - 9 ascii output at 1 second intervals:
 //`define UART_1SEC_OUTPUT_TEST
 
+
+
+
+
+
 // Include / use the module that encapsulates a 1-second interval 9600
 // digit transmit
 //`define USE_UART_TEST_MODULE
 
 
 
+
+
+
+
 // Testing clock output to a pin
-`define TEST_TIMING_TO_PIN_OUTPUT
+//`define TEST_TIMING_TO_PIN_OUTPUT
+
+
+
 
 
 

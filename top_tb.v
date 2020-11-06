@@ -159,6 +159,7 @@ module top_tb;
       .RTZ_POS (RTZ_POS),
       .UART_TX (UART_TX),
       .UART_RX (UART_RX),
+      // Below depends on MACRO for test timing output
       .PDO0 (PDO0),           // goes to JT3A Pin 10 (PDO0)
       .PDO1 (PDO1),           // goes to JT3A Pin 8 (PDO1)
       .PDO2 (PDO2)            // goes to JT3A Pin 6 (PDO2)
@@ -205,6 +206,11 @@ module top_tb;
             #10200 ext_trig_in = 1;
             #10250 ext_trig_in = 0;
             */
+
+            // What if there is another duplicate trigger?
+            #10000 ext_trig_in = 1;
+            #350 ext_trig_in = 0;
+
             #1000000 $finish; // vvp takes about 18 seconds at this 10M for pre_synth or maybe 60 sec for POST
             // 160MHz * 0.04 sec = 6.4M
         end

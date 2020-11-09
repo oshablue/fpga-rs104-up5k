@@ -1587,7 +1587,13 @@ module top (
       reg [7:0] next_byte;
       always @ ( posedge read_mem_uart ) begin
         //next_byte <= next_byte + 1; // works  // mem[addr_rd];
-        //next_byte <= addr_rd[7:0]; // works
+        // NOTE: The next line for testing ramp output at the moment
+        // upon synth creates a 1Mbps baud, not 2Mbps. Not sure why.
+        // The test out lines are disabled when this happens. Haven't checked
+        // synth yet or with test out lines enabled. Maybe some optimization
+        // or pruning on synth changes things - or maybe a synth bug and again
+        // a benefit of updating to the latest tools. Anyway - heads up. That happens.
+        //next_byte <= addr_rd[7:0]; // works - but see above note
         next_byte <= mem[addr_rd];
       end
 
@@ -1736,7 +1742,25 @@ module top (
       //reg [31:0] cntr_fastest = 32'b0;
       //parameter period_fastest = 40;  // for 160MHz clk in  but that's too fast for the larger counters
       reg [7:0] cntr_fastest = 8'b 0;
-      parameter period_fastest = 20;  // 2Mbps ish
+      // On measurement of symbols at the Tx input pin to the 485 chip we get
+      // a measured symbol rate, on one board about 1.89MHz and on another maybe 1.91MHz
+      // So we need to tighten this up
+      //parameter period_fastest = 20;  // 2Mbps ish - see above
+      parameter period_fastest = 19;
+      // 19 gives nearly exact 2Mbps rate (2MHz width of pulse or low bit)
+      // on the 324 FA hardware - which seems to have a slightly faster clock
+      // enough that the 1.91MHz rate worked while the #323 board seems to run
+      // a touch slower, hard to see on the clock eye diagram, clocks look
+      // very similar (would need higher end scope to verify but symbol
+      // width shows the difference) such that some bytes were broken, giving
+      // data spikes and fairly frequently disrupting the 2nd SOF byte creating
+      // a lost SOF and thus lost WF buffers and SOF data appended at the end of
+      // WFs graphed in dacqman because buffers were at length of 8k samples
+      // instead of 4k when sliced by SOFs
+      // Slowest board is a 5.5% baud difference, while faster board was a 4.5% difference
+      // from target baud of 2Mbps
+      // There is probably an N-1 missing in the real calculation here 
+      //
       // 44: 1,818,181.8...
       // 43: Toggle at 160MHz / 43 => divide once more by two for the rate since
       //     this is a toggle (output test ok)

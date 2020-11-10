@@ -1418,7 +1418,21 @@ module top (
     // And confirm
     `ifndef TEST_NO_BRAM
       //(* keep *) reg [7:0] sof [0:11];               // 12-byte start of frame
-      reg [7:0] sof [0:11];
+      //reg [7:0] sof [0:11];
+      parameter NUM_SOF_BYTES = 20; // normally 12
+
+      // 16th byte issue doesn't happen for ..._TO_USE = 8
+      //or 9 or 10 or 13 or 15
+      // happens at 11, 12, 16, not 20
+      // at 2nd try at 16 getting massive Wf corruption with zero like values interspersed
+      // and also break in the streaming flow
+      // totally broken noise at 14
+      // Yeah, I think we def need to move to next gen / later synth tools
+      // For now - using 13 as this seems stable
+      // Again, need to update synth and tools and retry all again 
+      parameter NUM_SOF_BYTES_TO_USE = 13; // normally 12
+      reg [7:0] sof [0:NUM_SOF_BYTES-1];
+
       // For individual clock cycle timing verifications or auto sync, on the
       // serial comms output end, you may wish to use values like:
       // 0x55 or 0xaa for some sync or SOF bytes
@@ -1464,6 +1478,17 @@ module top (
         sof[9] <= 8'h 00;
         sof[10] <= 8'h ff;
         sof[11] <= 8'h 00;
+        // Troubleshooting the 16th byte issue
+        // 127 is half the converter range and where this should be at nominally
+        // zero input
+        sof[12] <= 8'd 127;
+        sof[13] <= 8'd 127;
+        sof[14] <= 8'd 127;
+        sof[15] <= 8'd 127;
+        sof[16] <= 8'd 127;
+        sof[17] <= 8'd 127;
+        sof[18] <= 8'd 127;
+        sof[19] <= 8'd 127;
       end
     `endif // TEST_NO_BRAM
 
@@ -1593,7 +1618,24 @@ module top (
         // synth yet or with test out lines enabled. Maybe some optimization
         // or pruning on synth changes things - or maybe a synth bug and again
         // a benefit of updating to the latest tools. Anyway - heads up. That happens.
+        // UPDATE: Now with change of baud rate clock period to 19 from 20 for
+        // better 2Mbps clocking, the line below, at least on the current hardware,
+        // or under whatever synth randomness is happening now, this happens at
+        // again now 2Mbps - so it also works as a test at the same baud rate
+        // on the host side again.
         //next_byte <= addr_rd[7:0]; // works - but see above note
+
+        // Real intent is here - to read the memory address
+        // TODO: Why is the 16th byte of the output randomly
+        // 0,1,2,3,4 or 6 (so far)
+        // Doesn't seem to be tied to the scan number
+        // Happens with either single PAQ, or continuous single channel paq,
+        // and with channel scan
+        // Only the 4th byte of the real data output after the SOF which
+        // makes it the 16th byte overall in the output, and theoretically
+        // the 16th byte in memory.  Occasional intervals - doesn't seem to be
+        // tied to PAQ frequency, ie can be long delays between paqs or short.
+        //
         next_byte <= mem[addr_rd];
       end
 
@@ -1606,7 +1648,7 @@ module top (
 
           if ( addr_rd == 4 ) begin
             uart_txbyte <= seq_id;
-          end else if ( addr_rd < 12 ) begin
+          end else if ( addr_rd < NUM_SOF_BYTES_TO_USE ) begin // 12 ) begin
 
             `ifndef TEST_NO_BRAM
               uart_txbyte <= sof[addr_rd];
@@ -1759,7 +1801,7 @@ module top (
       // instead of 4k when sliced by SOFs
       // Slowest board is a 5.5% baud difference, while faster board was a 4.5% difference
       // from target baud of 2Mbps
-      // There is probably an N-1 missing in the real calculation here 
+      // There is probably an N-1 missing in the real calculation here
       //
       // 44: 1,818,181.8...
       // 43: Toggle at 160MHz / 43 => divide once more by two for the rate since

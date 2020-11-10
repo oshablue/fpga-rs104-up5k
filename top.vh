@@ -1,5 +1,5 @@
 // FIRMWARE REVISION
-`define FWREV RS104-RC-2020Q401A
+`define FWREV RS104-RC-2020Q401B
 
 // MACRO for toggling PLL on/off for respectively real world h/w vs simulation of POST for example
 //`define SIM

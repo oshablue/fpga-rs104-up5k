@@ -1,9 +1,14 @@
 # FPGA RSCPT UP5K
 
-Demo / Sample Verilog code for AtomIDE + APIO for IceStorm/IceTools for Lattice Semi up5k
-device on the HDL-0108-RSCPT from OshaBlue.
+Note: This is a pretty rough repo right now. Contains lots of examples, including 
+abandoned approaches and scripts no longer used. This is an interim snapshot. Though
+main code (top.v, top_tb.v, pins.pcf) is currently deployed in prototype and demo 
+firmware and hardware.
 
-Experimental code to demo the HDL-0108-RSCPT (OshaBlue) 8-Channel rapid scan
+Demo / Sample Verilog code for AtomIDE + APIO for IceStorm/IceTools for Lattice Semi up5k
+device on the HDL-0104-RS104 from OshaBlue.
+
+Experimental code to demo the HDL-0104-RS104 (OshaBlue) 4-Channel rapid scan
 ultrasound for NDT hardware.
 
 It demonstrates on the Lattice Semi up5k sg48 device:
